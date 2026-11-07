@@ -58,6 +58,10 @@ export async function placeCall(to: string, clientRequestId: string): Promise<Se
     console.log(`[CALL → ${to}] (request ${clientRequestId})`);
     return { ok: true, ref: null, status: "logged", detail: null };
   }
+  // SMS-only mode: no voice number bought yet, so skip calls without breaking the SMS.
+  if (!process.env.AT_VOICE_NUMBER) {
+    return { ok: false, ref: null, status: "skipped", detail: "No AT_VOICE_NUMBER set (SMS-only mode)" };
+  }
   const { ok, json } = await post("https://voice.africastalking.com/call", {
     username: env.at.username(),
     from: env.at.voiceNumber(),
