@@ -3,6 +3,7 @@ import { db } from "@/lib/supabase";
 import { getAlertContext, locationText, mapUrl } from "@/lib/alerts/engine";
 import { ackFromDashboard, closeAlertAction } from "@/app/actions";
 import AutoRefresh from "@/components/AutoRefresh";
+import PostcodeBadge from "@/components/PostcodeBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,11 @@ export default async function AlertDetail({ params }: { params: Promise<{ id: st
           </div>
         )}
         {a.resolution_note && <div>Note: {a.resolution_note}</div>}
+      </div>
+
+      <div className="rounded-lg border bg-white p-3">
+        <div className="mb-1 text-sm font-semibold">📮 NIPOST postcode sent to responders</div>
+        <PostcodeBadge postcode={ctx.postcode} status={ctx.postcodeStatus} detail={ctx.postcodeArea} />
       </div>
 
       {active && (

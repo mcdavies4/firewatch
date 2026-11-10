@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/supabase";
 import { AUDIT_ITEMS, PASS_MARK, STATUS_STYLE, ago } from "@/lib/ui";
-import { submitAudit, testAlarm } from "@/app/actions";
+import { recheckShopPostcode, submitAudit, testAlarm } from "@/app/actions";
+import PostcodeBadge from "@/components/PostcodeBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,23 @@ export default async function ShopPage({ params }: { params: Promise<{ id: strin
           {shop.owner_name} · {shop.owner_phone} · {shop.trade ?? "—"} · {shop.sections?.name ?? "No section"},{" "}
           {shop.markets?.name}
         </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <PostcodeBadge
+            postcode={shop.nipost_postcode}
+            status={shop.postcode_status}
+            detail={[shop.postcode_lga && `${shop.postcode_lga} LGA`, shop.postcode_state].filter(Boolean).join(", ") || null}
+          />
+          <form action={recheckShopPostcode} className="flex gap-2">
+            <input type="hidden" name="shop_id" value={shop.id} />
+            <input
+              name="nipost_postcode"
+              defaultValue={shop.nipost_postcode ?? ""}
+              placeholder="EK-01-A03-FK-01"
+              className="w-40 rounded border p-1.5 font-mono uppercase"
+            />
+            <button className="rounded bg-zinc-900 px-3 py-1.5 text-sm font-semibold text-white">Check</button>
+          </form>
+        </div>
         {latestCert && (
           <Link href={`/cert/${latestCert.certificate_code}`} className="mt-2 inline-block rounded bg-emerald-600 px-3 py-1 text-sm text-white">
             ✓ Certified {latestCert.certificate_code} — valid to {latestCert.valid_until}

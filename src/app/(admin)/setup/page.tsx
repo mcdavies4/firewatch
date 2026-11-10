@@ -66,7 +66,7 @@ export default async function Setup() {
           <input name="owner_phone" required placeholder="Owner phone (0803… or +234…)" className={input} />
           <input name="backup_phone" placeholder="Backup phone (optional)" className={input} />
           <input name="trade" placeholder="Trade, e.g. fabrics" className={input} />
-          <input name="nipost_postcode" placeholder="NIPOST postcode (optional)" className={input} />
+          <input name="nipost_postcode" placeholder="NIPOST postcode, e.g. EK-01-A03-FK-01 (checked on save)" className={`${input} font-mono uppercase`} />
           <button className={btn}>Register shop</button>
         </form>
 

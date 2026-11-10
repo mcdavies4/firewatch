@@ -7,6 +7,7 @@ import { randomBytes } from "crypto";
 import { db } from "@/lib/supabase";
 import { acknowledge, closeAlert, handleUplink } from "@/lib/alerts/engine";
 import { AUDIT_ITEMS, PASS_MARK } from "@/lib/ui";
+import { checkPostcode, postcodeColumns, postcodeForPin } from "@/lib/nipost";
 
 /** Server actions are reachable from any page, so admin ones re-check the dashboard login. */
 async function requireAdmin() {
@@ -52,8 +53,10 @@ export async function createSection(f: FormData) {
 
 export async function createShop(f: FormData) {
   await requireAdmin();
+  const pc = await checkPostcode(s(f, "nipost_postcode"));
   await must(
     db().from("shops").insert({
+      ...postcodeColumns(pc),
       market_id: s(f, "market_id"),
       section_id: s(f, "section_id"),
       shop_number: s(f, "shop_number"),
@@ -61,7 +64,6 @@ export async function createShop(f: FormData) {
       owner_phone: phone(s(f, "owner_phone")),
       backup_phone: phone(s(f, "backup_phone")),
       trade: s(f, "trade"),
-      nipost_postcode: s(f, "nipost_postcode"),
     }),
   );
   revalidatePath("/setup");
@@ -175,19 +177,24 @@ const num = (v: string | null) => (v !== null && Number.isFinite(Number(v)) ? Nu
 export async function createHome(f: FormData) {
   await requireAdmin();
   const supa = db();
+  const lat = num(s(f, "lat"));
+  const lng = num(s(f, "lng"));
+  // Postcode typed in → verify it with NIPOST. None typed but a map pin → ask NIPOST for it.
+  let pc = await checkPostcode(s(f, "nipost_postcode"));
+  if (pc.status === "none" && lat !== null && lng !== null) pc = await postcodeForPin(lat, lng);
   const { data: home } = await must(
     supa
       .from("markets")
       .insert({
+        ...postcodeColumns(pc),
         kind: "home",
         name: s(f, "name"),
         city: s(f, "city"),
         state: s(f, "state"),
         address: s(f, "address"),
-        nipost_postcode: s(f, "nipost_postcode"),
         landmark: s(f, "landmark"),
-        lat: num(s(f, "lat")),
-        lng: num(s(f, "lng")),
+        lat,
+        lng,
       })
       .select("id")
       .single(),
@@ -199,7 +206,7 @@ export async function createHome(f: FormData) {
       owner_name: s(f, "owner_name"),
       owner_phone: phone(s(f, "owner_phone")),
       backup_phone: phone(s(f, "backup_phone")),
-      nipost_postcode: s(f, "nipost_postcode"),
+      nipost_postcode: pc.postcode,
     }),
   );
   revalidatePath("/homes");
@@ -239,4 +246,37 @@ export async function addHomeDevice(f: FormData) {
     }),
   );
   revalidatePath(`/homes/${homeId}`);
+}
+
+/** Re-checks a home's postcode with NIPOST, or sets a new one / finds it from the map pin. */
+export async function recheckHomePostcode(f: FormData) {
+  await requireAdmin();
+  const supa = db();
+  const homeId = s(f, "market_id")!;
+  const { data: home } = await must(
+    supa.from("markets").select("nipost_postcode, lat, lng").eq("id", homeId).single(),
+  );
+  const typed = s(f, "nipost_postcode");
+  const fromPin = s(f, "mode") === "pin";
+  let pc = fromPin
+    ? await postcodeForPin(Number(home!.lat), Number(home!.lng))
+    : await checkPostcode(typed ?? home!.nipost_postcode);
+  // A failed pin search keeps the existing postcode, only noting why.
+  if (fromPin && pc.status === "none" && home!.nipost_postcode) {
+    pc = { ...(await checkPostcode(home!.nipost_postcode)), note: pc.note };
+  }
+  await must(supa.from("markets").update(postcodeColumns(pc)).eq("id", homeId));
+  await must(supa.from("shops").update({ nipost_postcode: pc.postcode }).eq("market_id", homeId).eq("shop_number", "HOME"));
+  revalidatePath(`/homes/${homeId}`);
+  revalidatePath("/homes");
+}
+
+/** Re-checks a market shop's postcode with NIPOST. */
+export async function recheckShopPostcode(f: FormData) {
+  await requireAdmin();
+  const shopId = s(f, "shop_id")!;
+  const { data: shop } = await must(db().from("shops").select("nipost_postcode").eq("id", shopId).single());
+  const pc = await checkPostcode(s(f, "nipost_postcode") ?? shop!.nipost_postcode);
+  await must(db().from("shops").update(postcodeColumns(pc)).eq("id", shopId));
+  revalidatePath(`/shops/${shopId}`);
 }

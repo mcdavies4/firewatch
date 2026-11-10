@@ -14,6 +14,7 @@ type HomeRow = {
   city: string;
   address: string | null;
   nipost_postcode: string | null;
+  postcode_status: string | null;
   shops: {
     owner_name: string;
     owner_phone: string;
@@ -26,7 +27,7 @@ export default async function Homes() {
   const [{ data }, { data: openAlerts }] = await Promise.all([
     supa
       .from("markets")
-      .select("id, name, city, address, nipost_postcode, shops(owner_name, owner_phone, sensors(status, last_seen_at))")
+      .select("id, name, city, address, nipost_postcode, postcode_status, shops(owner_name, owner_phone, sensors(status, last_seen_at))")
       .eq("kind", "home")
       .order("name"),
     supa.from("alerts").select("market_id, hazard").in("status", ["open", "acknowledged"]),
@@ -55,9 +56,11 @@ export default async function Homes() {
           return (
             <Link key={h.id} href={`/homes/${h.id}`} className={`block rounded-lg p-4 ${style.tile}`}>
               <div className="text-lg font-bold">{h.name}</div>
-              <div className="text-sm">
-                {[h.address, h.city].filter(Boolean).join(", ")}
-                {h.nipost_postcode && ` · ${h.nipost_postcode}`}
+              <div className="text-sm">{[h.address, h.city].filter(Boolean).join(", ")}</div>
+              <div className="mt-1 font-mono text-sm font-bold">
+                {h.nipost_postcode ?? "No postcode"}
+                {h.postcode_status === "verified" && " ✓ NIPOST"}
+                {(h.postcode_status === "not_found" || h.postcode_status === "invalid_format") && " ✗ check postcode"}
               </div>
               <div className="mt-2 text-sm font-semibold">
                 {alert ? (alert.hazard === "co" ? "☠️ CARBON MONOXIDE" : "🔥 FIRE ALARM") : style.label}
@@ -79,8 +82,22 @@ export default async function Homes() {
           <input name="address" required placeholder="Street address" className={`${input} sm:col-span-2`} />
           <input name="city" required placeholder="City / town" className={input} />
           <input name="state" placeholder="State" className={input} />
-          <input name="nipost_postcode" placeholder="NIPOST postcode" className={input} />
-          <input name="landmark" placeholder="Landmark, e.g. opposite St Mary's church" className={input} />
+          <div className="sm:col-span-2">
+            <input
+              name="nipost_postcode"
+              placeholder="NIPOST postcode, e.g. EK-01-A03-FK-01"
+              className={`${input} font-mono uppercase`}
+            />
+            <p className="mt-1 text-sm text-zinc-700">
+              Checked with NIPOST when you save. Don&apos;t know it? Leave it blank and add the map pin below, and
+              Firewatch will look it up — or find it at{" "}
+              <a href="https://postcode.gov.ng/find" target="_blank" className="font-medium underline">
+                postcode.gov.ng/find
+              </a>
+              .
+            </p>
+          </div>
+          <input name="landmark" placeholder="Landmark, e.g. opposite St Mary's church" className={`${input} sm:col-span-2`} />
           <input name="lat" placeholder="Map pin latitude (optional)" className={input} />
           <input name="lng" placeholder="Map pin longitude (optional)" className={input} />
         </div>

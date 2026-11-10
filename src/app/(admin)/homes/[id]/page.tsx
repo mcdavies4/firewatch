@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/supabase";
 import { env } from "@/lib/env";
 import { STATUS_STYLE, ago } from "@/lib/ui";
-import { addHomeContact, addHomeDevice, testAlarm, toggleContact } from "@/app/actions";
+import { addHomeContact, addHomeDevice, recheckHomePostcode, testAlarm, toggleContact } from "@/app/actions";
+import PostcodeBadge from "@/components/PostcodeBadge";
+import { nipostEnabled } from "@/lib/nipost";
 import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
@@ -74,7 +76,6 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
         <h1 className="mt-1 text-2xl font-bold">🏠 {home.name}</h1>
         <p className="text-zinc-700">
           {[home.address, home.city, home.state].filter(Boolean).join(", ")}
-          {home.nipost_postcode && <> · Postcode <b>{home.nipost_postcode}</b></>}
           {home.landmark && <> · near {home.landmark}</>}
           {map && (
             <>
@@ -88,6 +89,54 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
           {household?.backup_phone && ` · ${household.backup_phone}`}
         </p>
       </div>
+
+      <section className="space-y-3 rounded-lg border-2 border-zinc-900 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">📮 NIPOST digital postcode</h2>
+          {home.postcode_checked_at && (
+            <span className="text-sm text-zinc-700">checked {ago(home.postcode_checked_at)}</span>
+          )}
+        </div>
+        <PostcodeBadge postcode={home.nipost_postcode} status={home.postcode_status} />
+        {(home.postcode_locality || home.postcode_lga || home.postcode_state) && (
+          <p className="text-zinc-900">
+            {[home.postcode_locality, home.postcode_lga && `${home.postcode_lga} LGA`, home.postcode_state]
+              .filter(Boolean)
+              .join(", ")}
+          </p>
+        )}
+        {home.postcode_note && <p className="text-sm text-zinc-700">{home.postcode_note}</p>}
+        <p className="text-sm text-zinc-700">
+          Every alert for this home carries this postcode, so responders and the fire service go to the exact building.
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <form action={recheckHomePostcode} className="flex flex-wrap gap-2">
+            <input type="hidden" name="market_id" value={id} />
+            <input
+              name="nipost_postcode"
+              defaultValue={home.nipost_postcode ?? ""}
+              placeholder="EK-01-A03-FK-01"
+              className={`${input} max-w-[14rem] font-mono uppercase`}
+            />
+            <button className={btn}>{nipostEnabled() ? "Check with NIPOST" : "Save postcode"}</button>
+          </form>
+          {map && nipostEnabled() && (
+            <form action={recheckHomePostcode}>
+              <input type="hidden" name="market_id" value={id} />
+              <input type="hidden" name="mode" value="pin" />
+              <button className="rounded border-2 border-zinc-900 px-3 py-2 text-sm font-semibold">
+                📍 Find postcode from map pin
+              </button>
+            </form>
+          )}
+        </div>
+        {!nipostEnabled() && (
+          <p className="rounded bg-amber-100 p-2 text-sm text-amber-900">
+            Live NIPOST checks switch on when <code className="font-mono">NIPOST_API_KEY</code> is added in Vercel.
+            Until then the postcode format is checked here.
+          </p>
+        )}
+      </section>
 
       {open && (
         <Link

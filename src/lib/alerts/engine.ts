@@ -30,6 +30,8 @@ export interface AlertContext {
   hazard: "fire" | "co";
   address: string | null;
   postcode: string | null;
+  postcodeStatus: string | null;
+  postcodeArea: string | null;
   landmark: string | null;
   lat: number | null;
   lng: number | null;
@@ -125,7 +127,7 @@ export async function getAlertContext(alertId: string): Promise<AlertContext | n
   const { data } = await db()
     .from("alerts")
     .select(
-      "*, shops(shop_number, owner_name, owner_phone, backup_phone), sections(name), markets(name, kind, address, nipost_postcode, landmark, lat, lng)",
+      "*, shops(shop_number, owner_name, owner_phone, backup_phone, nipost_postcode, postcode_status, postcode_lga, postcode_state), sections(name), markets(name, kind, address, nipost_postcode, postcode_status, postcode_lga, postcode_state, landmark, lat, lng)",
     )
     .eq("id", alertId)
     .maybeSingle();
@@ -141,7 +143,15 @@ export async function getAlertContext(alertId: string): Promise<AlertContext | n
     kind: data.markets?.kind === "home" ? "home" : "market",
     hazard: data.hazard === "co" ? "co" : "fire",
     address: data.markets?.address ?? null,
-    postcode: data.markets?.nipost_postcode ?? null,
+    // Homes: the home's postcode. Markets: the shop's own building postcode.
+    ...(() => {
+      const src = data.markets?.kind === "home" ? data.markets : data.shops;
+      return {
+        postcode: src?.nipost_postcode ?? null,
+        postcodeStatus: src?.postcode_status ?? null,
+        postcodeArea: [src?.postcode_lga && `${src.postcode_lga} LGA`, src?.postcode_state].filter(Boolean).join(", ") || null,
+      };
+    })(),
     landmark: data.markets?.landmark ?? null,
     lat: data.markets?.lat ?? null,
     lng: data.markets?.lng ?? null,
@@ -187,13 +197,15 @@ export function locationText(ctx: AlertContext) {
     return [
       ctx.marketName,
       ctx.address,
-      ctx.postcode && `postcode ${ctx.postcode}`,
+      ctx.postcode && `NIPOST ${ctx.postcode}`,
       ctx.landmark && `near ${ctx.landmark}`,
     ]
       .filter(Boolean)
       .join(", ");
   }
-  return [`Shop ${ctx.shopNumber}`, ctx.sectionName, ctx.marketName].filter(Boolean).join(", ");
+  return [`Shop ${ctx.shopNumber}`, ctx.sectionName, ctx.marketName, ctx.postcode && `NIPOST ${ctx.postcode}`]
+    .filter(Boolean)
+    .join(", ");
 }
 
 export function mapUrl(ctx: AlertContext): string | null {

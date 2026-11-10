@@ -45,7 +45,17 @@ export default async function Ack({
         {ctx.hazard === "co" ? "☠️" : "🔥"} {hazardTitle(ctx)}
       </h1>
       <p className="mt-1 text-lg">{locationText(ctx)}</p>
-      <p className="mt-2 font-semibold">{hazardAdvice(ctx)}</p>
+      {ctx.postcode && (
+        <div className="mt-3 rounded-lg border-2 border-zinc-900 p-3">
+          <div className="text-sm font-semibold uppercase tracking-wide text-zinc-700">NIPOST postcode</div>
+          <div className="font-mono text-2xl font-bold">{ctx.postcode}</div>
+          <div className="text-sm text-zinc-800">
+            {ctx.postcodeStatus === "verified" ? "✓ Verified building" : "Not yet verified"}
+            {ctx.postcodeArea && ` · ${ctx.postcodeArea}`}
+          </div>
+        </div>
+      )}
+      <p className="mt-3 font-semibold">{hazardAdvice(ctx)}</p>
       {mapUrl(ctx) && (
         <a href={mapUrl(ctx)!} target="_blank" className="mt-2 inline-block rounded bg-zinc-900 px-3 py-2 text-white">
           📍 Open in Maps

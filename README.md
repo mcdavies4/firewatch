@@ -56,6 +56,21 @@ On a home's page, each device has **📱 Open virtual sensor**. Open that link o
 ### Build the prototype unit
 Parts list, wiring and setup are at the top of `firmware/firewatch-home/firewatch-home.ino`. Paste the three `FW_*` lines from the home page, add WiFi details, flash, wait 3 minutes for warm-up, then tune the thresholds from the Serial Monitor.
 
+## 📮 NIPOST digital postcode
+
+Every home and market shop carries its **NIPOST digital postcode** (e.g. `EK-01-A03-FK-01`), and every alert — call, SMS, responder page — sends it, so responders go to the exact building.
+
+| Where | What happens |
+|---|---|
+| Add a home / register a shop | Postcode is format-checked, then **verified with NIPOST** (`/v1/lookup`); state, LGA and locality are saved |
+| Add a home with only a map pin | Firewatch asks NIPOST for the building's postcode (`/v1/search/reverse`) |
+| Home page / shop page | Postcode badge (✓ NIPOST verified / ✗ not found / format OK), **Check with NIPOST** and **Find postcode from map pin** buttons |
+| Alerts | SMS reads `… NIPOST EK-01-A03-FK-01 …`; the responder page shows the postcode large with "✓ Verified building" |
+
+Code: `src/lib/nipost.ts`. Database: run `supabase/migrations/003_nipost.sql` after `002_home.sql`.
+
+**Switching on live NIPOST checks:** get an API key from the developer dashboard at postcode.gov.ng, add `NIPOST_API_KEY` (and optionally `NIPOST_LOOKUP_LEVEL`, default 2) in Vercel, redeploy. Without a key everything still works and the format is checked offline. Test: `npx tsx --conditions=react-server scripts/test-nipost.ts EK-01-A03-FK-01`.
+
 ## Escalation
 
 - **Tier 0** (immediately): shop owner (+ backup number) and tier-0 responders, e.g. night security.
