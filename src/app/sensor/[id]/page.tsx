@@ -20,7 +20,7 @@ export default async function SensorPage({
   const { k } = await searchParams;
   const { data: sensor } = await db()
     .from("sensors")
-    .select("dev_eui, device_key, label, shops(markets(name))")
+    .select("dev_eui, device_key, label, shops(shop_number, markets(name, kind))")
     .eq("dev_eui", id.toUpperCase())
     .maybeSingle();
 
@@ -28,7 +28,11 @@ export default async function SensorPage({
     return <main className="p-6 text-center text-zinc-700">This sensor link is not valid.</main>;
   }
 
-  const home = (sensor as unknown as { shops: { markets: { name: string } | null } | null }).shops?.markets?.name;
+  const shop = (sensor as unknown as {
+    shops: { shop_number: string; markets: { name: string; kind: string } | null } | null;
+  }).shops;
+  const isHome = shop?.markets?.kind === "home";
+  const label = isHome ? (sensor.label ?? "Alarm") : `Shop ${shop?.shop_number ?? "?"}`;
 
-  return <VirtualSensor deviceId={sensor.dev_eui} deviceKey={k!} label={sensor.label ?? "Alarm"} home={home ?? "Home"} />;
+  return <VirtualSensor deviceId={sensor.dev_eui} deviceKey={k!} label={label} home={shop?.markets?.name ?? "Firewatch"} />;
 }

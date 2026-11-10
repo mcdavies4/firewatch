@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/supabase";
 import { STATUS_STYLE, worstStatus, ago } from "@/lib/ui";
 import AutoRefresh from "@/components/AutoRefresh";
+import DbError from "@/components/DbError";
 
 export const dynamic = "force-dynamic";
 
@@ -17,18 +18,26 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const { market: marketParam } = await searchParams;
   const supa = db();
 
-  const { data: markets } = await supa.from("markets").select("id, name, city").eq("kind", "market").order("name");
+  const { data: markets, error } = await supa
+    .from("markets")
+    .select("id, name, city")
+    .eq("kind", "market")
+    .order("name");
+  if (error) return <DbError message={error.message} />;
   if (!markets?.length) {
     return (
-      <p>
-        No markets yet. <Link className="underline" href="/setup">Add one in Setup</Link>, or go to{" "}
-        <Link className="underline" href="/homes">Homes</Link>.
-      </p>
+      <div className="space-y-3 rounded-lg border bg-white p-5">
+        <h1 className="text-xl font-bold">No markets yet</h1>
+        <p className="text-zinc-800">
+          Go to <Link className="font-semibold underline" href="/demo">Demo</Link> to create a demo market and home in one
+          click, or add a real one in <Link className="font-semibold underline" href="/setup">Setup</Link>.
+        </p>
+      </div>
     );
   }
   const market = markets.find((m) => m.id === marketParam) ?? markets[0];
 
-  const [{ data: sections }, { data: shops }, { data: alerts }] = await Promise.all([
+  const [{ data: sections }, { data: shops, error: shopsError }, { data: alerts }] = await Promise.all([
     supa.from("sections").select("id, name").eq("market_id", market.id).order("name"),
     supa
       .from("shops")
@@ -43,6 +52,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       .order("created_at", { ascending: false }),
   ]);
 
+  if (shopsError) return <DbError message={shopsError.message} />;
   const allShops = (shops ?? []) as unknown as Shop[];
   const allSensors = allShops.flatMap((s) => s.sensors);
   const count = (st: string) => allSensors.filter((x) => x.status === st).length;

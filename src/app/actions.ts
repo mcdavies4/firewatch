@@ -280,3 +280,112 @@ export async function recheckShopPostcode(f: FormData) {
   await must(db().from("shops").update(postcodeColumns(pc)).eq("id", shopId));
   revalidatePath(`/shops/${shopId}`);
 }
+
+// ---------- Demo ----------
+const newEui = () => randomBytes(8).toString("hex").toUpperCase();
+const newKey = () => randomBytes(16).toString("hex");
+
+/**
+ * One click: a demo market (2 lines, 6 shops, a sensor in each) and a demo home
+ * (smoke + CO device). Every alert goes to the phone number entered, so you can
+ * film the whole thing on your own phone.
+ */
+export async function createDemo(f: FormData) {
+  await requireAdmin();
+  const supa = db();
+  const myPhone = phone(s(f, "phone"));
+  const myName = s(f, "name") ?? "Demo responder";
+  if (!myPhone) throw new Error("Enter the phone number that should receive the demo alerts");
+
+  // Market
+  const { data: market } = await must(
+    supa.from("markets").insert({ kind: "market", name: "Demo Market", city: "Lagos", state: "Lagos" }).select("id").single(),
+  );
+  const { data: secs } = await must(
+    supa
+      .from("sections")
+      .insert([
+        { market_id: market!.id, name: "Line A" },
+        { market_id: market!.id, name: "Line B" },
+      ])
+      .select("id, name"),
+  );
+  const lineA = secs!.find((x: { name: string }) => x.name === "Line A")!.id;
+  const lineB = secs!.find((x: { name: string }) => x.name === "Line B")!.id;
+  const shopRows = [
+    { shop_number: "A1", trade: "Fabrics", section_id: lineA },
+    { shop_number: "A2", trade: "Electronics", section_id: lineA },
+    { shop_number: "A3", trade: "Shoes", section_id: lineA },
+    { shop_number: "B1", trade: "Foodstuff", section_id: lineB },
+    { shop_number: "B2", trade: "Phones", section_id: lineB },
+    { shop_number: "B3", trade: "Cosmetics", section_id: lineB },
+  ].map((r) => ({ ...r, market_id: market!.id, owner_name: myName, owner_phone: myPhone }));
+  const { data: shops } = await must(supa.from("shops").insert(shopRows).select("id, shop_number"));
+  await must(
+    supa.from("sensors").insert(
+      shops!.map((sh: { id: string; shop_number: string }) => ({
+        dev_eui: newEui(),
+        device_key: newKey(),
+        shop_id: sh.id,
+        kind: "smoke_heat",
+        label: `Shop ${sh.shop_number}`,
+        status: "ok",
+        battery_pct: 95,
+        last_seen_at: new Date().toISOString(),
+      })),
+    ),
+  );
+
+  // Home
+  const pc = await checkPostcode(s(f, "postcode"));
+  const { data: home } = await must(
+    supa
+      .from("markets")
+      .insert({
+        ...postcodeColumns(pc),
+        kind: "home",
+        name: "Demo Home",
+        city: "Enugu",
+        state: "Enugu",
+        address: "12 Demo Close, Independence Layout",
+        landmark: "opposite the filling station",
+      })
+      .select("id")
+      .single(),
+  );
+  const { data: household } = await must(
+    supa
+      .from("shops")
+      .insert({ market_id: home!.id, shop_number: "HOME", owner_name: myName, owner_phone: myPhone, nipost_postcode: pc.postcode })
+      .select("id")
+      .single(),
+  );
+  await must(
+    supa.from("sensors").insert([
+      { dev_eui: newEui(), device_key: newKey(), shop_id: household!.id, kind: "smoke_co", label: "Generator room", status: "ok", battery_pct: 92, last_seen_at: new Date().toISOString() },
+      { dev_eui: newEui(), device_key: newKey(), shop_id: household!.id, kind: "smoke", label: "Kitchen", status: "ok", battery_pct: 88, last_seen_at: new Date().toISOString() },
+    ]),
+  );
+
+  revalidatePath("/demo");
+  revalidatePath("/dashboard");
+  revalidatePath("/homes");
+  redirect("/demo");
+}
+
+/** Gives a sensor (e.g. a LoRaWAN market sensor) a key so it can be driven from the virtual sensor page. */
+export async function enableVirtualSensor(f: FormData) {
+  await requireAdmin();
+  await must(db().from("sensors").update({ device_key: newKey() }).eq("id", s(f, "sensor_id")!).is("device_key", null));
+  revalidatePath("/demo");
+}
+
+/** Closes every open alert, so the next drill sends fresh texts. */
+export async function closeAllAlerts() {
+  await requireAdmin();
+  const { data } = await db().from("alerts").select("id").in("status", ["open", "acknowledged"]);
+  for (const a of data ?? []) await closeAlert(a.id, "false_alarm", "Demo reset");
+  revalidatePath("/demo");
+  revalidatePath("/dashboard");
+  revalidatePath("/homes");
+}

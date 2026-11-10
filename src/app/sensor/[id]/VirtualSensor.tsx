@@ -96,7 +96,7 @@ export default function VirtualSensor({
 
   return (
     <main className="flex min-h-screen flex-col items-center bg-zinc-950 px-5 py-8 text-white">
-      <div className="text-sm uppercase tracking-widest text-zinc-300">Firewatch Home · virtual sensor</div>
+      <div className="text-sm uppercase tracking-widest text-zinc-300">Firewatch · virtual sensor</div>
       <h1 className="mt-1 text-center text-xl font-bold">{home}</h1>
       <div className="text-sm text-zinc-300">{label}</div>
 

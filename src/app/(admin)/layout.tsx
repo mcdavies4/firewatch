@@ -8,6 +8,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <span className="mr-2 text-lg font-bold text-red-600">🔥 Firewatch</span>
           <Link href="/dashboard" className="hover:underline">Markets</Link>
           <Link href="/homes" className="hover:underline">Homes</Link>
+          <Link href="/demo" className="rounded bg-red-600 px-2 py-0.5 text-white hover:bg-red-700">Demo</Link>
           <Link href="/alerts" className="hover:underline">Alerts</Link>
           <Link href="/setup" className="hover:underline">Setup</Link>
         </nav>

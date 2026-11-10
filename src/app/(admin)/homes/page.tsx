@@ -3,6 +3,7 @@ import { db } from "@/lib/supabase";
 import { STATUS_STYLE, worstStatus, ago } from "@/lib/ui";
 import { createHome } from "@/app/actions";
 import AutoRefresh from "@/components/AutoRefresh";
+import DbError from "@/components/DbError";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ type HomeRow = {
 
 export default async function Homes() {
   const supa = db();
-  const [{ data }, { data: openAlerts }] = await Promise.all([
+  const [{ data, error }, { data: openAlerts }] = await Promise.all([
     supa
       .from("markets")
       .select("id, name, city, address, nipost_postcode, postcode_status, shops(owner_name, owner_phone, sensors(status, last_seen_at))")
@@ -32,6 +33,7 @@ export default async function Homes() {
       .order("name"),
     supa.from("alerts").select("market_id, hazard").in("status", ["open", "acknowledged"]),
   ]);
+  if (error) return <DbError message={error.message} />;
   const homes = (data ?? []) as unknown as HomeRow[];
   const alertFor = (id: string) => openAlerts?.find((a) => a.market_id === id);
 
