@@ -20,6 +20,7 @@ async function post(url: string, form: Record<string, string>) {
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams(form).toString(),
+    signal: AbortSignal.timeout(15_000), // never hang an alert on a slow provider
   });
   const text = await res.text();
   let json: unknown = text;

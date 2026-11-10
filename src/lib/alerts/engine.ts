@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "../supabase";
 import { env } from "../env";
-import { placeCall, sendSms } from "../notify/africastalking";
+import { placeCall, sendSms, voiceEnabled, type SendResult } from "../notify/africastalking";
 import type { NormalisedUplink } from "../ingest/normalise";
 
 // ---------- Types ----------
@@ -253,37 +253,63 @@ export async function notifyTier(alertId: string, tier: number) {
     (map ? `Map: ${map} ` : "") +
     `Tap to confirm you're responding: ${ackUrl}`;
 
-  await Promise.all(
-    recipients.map(async (r) => {
-      const { data: attempt } = await supa
-        .from("alert_attempts")
-        .insert({ alert_id: alertId, tier, contact_name: r.name, contact_phone: r.phone, role: r.role, channel: "voice" })
-        .select("id")
-        .single();
-      const [call, text] = await Promise.all([placeCall(r.phone, attempt?.id ?? alertId), sendSms(r.phone, sms)]);
-      if (attempt) {
-        await supa
-          .from("alert_attempts")
-          .update({ provider_ref: call.ref, status: call.status, detail: call.detail as object })
-          .eq("id", attempt.id);
-      }
-      await supa.from("alert_attempts").insert({
-        alert_id: alertId,
-        tier,
-        contact_name: r.name,
-        contact_phone: r.phone,
-        role: r.role,
-        channel: "sms",
-        provider_ref: text.ref,
-        status: text.status,
-        detail: text.detail as object,
-      });
-    }),
-  );
+  // Texts go first and never wait on (or fail because of) the call.
+  await Promise.allSettled(recipients.map((r) => contactOne(alertId, tier, r, sms)));
 
   const maxTier = await highestTier(ctx.alert.market_id);
   const next = tier < maxTier ? new Date(Date.now() + env.escalationSeconds() * 1000).toISOString() : null;
   await supa.from("alerts").update({ current_tier: tier, next_escalation_at: next }).eq("id", alertId);
+}
+
+/** sendSms that logs instead of throwing, for follow-up messages. */
+const safeSms = (to: string, msg: string) => sendSms(to, msg).catch((e) => failed(e));
+
+const failed = (err: unknown): SendResult => ({
+  ok: false,
+  ref: null,
+  status: "failed",
+  detail: { errorMessage: err instanceof Error ? err.message : String(err) },
+});
+
+/** Texts one person, and calls them if calls are switched on. Records both; never throws. */
+async function contactOne(alertId: string, tier: number, r: Recipient, sms: string) {
+  const supa = db();
+  const base = { alert_id: alertId, tier, contact_name: r.name, contact_phone: r.phone, role: r.role };
+
+  const text = async () => {
+    const { data: row } = await supa
+      .from("alert_attempts")
+      .insert({ ...base, channel: "sms", status: "queued" })
+      .select("id")
+      .single();
+    const res = await sendSms(r.phone, sms).catch(failed);
+    if (row) {
+      await supa
+        .from("alert_attempts")
+        .update({ provider_ref: res.ref, status: res.status, detail: res.detail as object })
+        .eq("id", row.id);
+    }
+  };
+
+  const call = async () => {
+    // No voice number yet: texts only, and no confusing "call" row.
+    if (env.notifyMode() === "live" && !voiceEnabled()) return;
+    const { data: row } = await supa
+      .from("alert_attempts")
+      .insert({ ...base, channel: "voice", status: "queued" })
+      .select("id")
+      .single();
+    const res = await placeCall(r.phone, row?.id ?? alertId).catch(failed);
+    if (row) {
+      await supa
+        .from("alert_attempts")
+        .update({ provider_ref: res.ref, status: res.status, detail: res.detail as object })
+        .eq("id", row.id);
+    }
+  };
+
+  const results = await Promise.allSettled([text(), call()]);
+  for (const x of results) if (x.status === "rejected") console.error("contact failed", r.phone, x.reason);
 }
 
 /** Called every minute by cron: moves unacknowledged alerts up the chain. */
@@ -339,7 +365,7 @@ export async function acknowledge(alertId: string, by: string) {
   if (ctx) {
     await Promise.all(
       phones.map((p) =>
-        sendSms(
+        safeSms(
           p,
           `UPDATE: ${by} is responding to the ${ctx.hazard === "co" ? "carbon monoxide" : "fire"} alert at ${locationText(ctx)}.`,
         ),
@@ -393,7 +419,7 @@ export async function runHealthCheck() {
     if (!m) continue;
     // Homes have no technician: tell the household directly.
     if (s.shops?.markets?.kind === "home") {
-      await sendSms(
+      await safeSms(
         s.shops.owner_phone,
         `Firewatch: your alarm${s.label ? ` (${s.label})` : ""} at ${s.shops.markets.name} has gone offline. Please check its power and WiFi.`,
       );
@@ -412,7 +438,7 @@ export async function runHealthCheck() {
       .eq("role", "technician")
       .eq("active", true);
     const msg = `Firewatch: ${shops.length} sensor(s) offline — shops ${shops.slice(0, 15).join(", ")}${shops.length > 15 ? "…" : ""}. Please check batteries/placement.`;
-    await Promise.all((techs ?? []).map((t) => sendSms(t.phone, msg)));
+    await Promise.all((techs ?? []).map((t) => safeSms(t.phone, msg)));
   }
 
   return { offline: items.length };

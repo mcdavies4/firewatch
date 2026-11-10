@@ -8,8 +8,15 @@ import { explainDelivery } from "@/lib/notify/explain";
 
 export const dynamic = "force-dynamic";
 
-export default async function AlertDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function AlertDetail({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ already?: string }>;
+}) {
   const { id } = await params;
+  const { already } = await searchParams;
   const ctx = await getAlertContext(id);
   if (!ctx) notFound();
   const a = ctx.alert as typeof ctx.alert & {
@@ -31,6 +38,12 @@ export default async function AlertDetail({ params }: { params: Promise<{ id: st
   return (
     <div className="space-y-6">
       <AutoRefresh seconds={5} />
+      {already && (
+        <div className="rounded-lg border-2 border-amber-700 bg-amber-100 p-3 font-semibold text-amber-950">
+          No new texts were sent: this device already has an open alert (below). Close it with &quot;False alarm&quot; or
+          &quot;Handled&quot;, or press Reset on the Demo page, then run the drill again.
+        </div>
+      )}
       <div className={`rounded-lg p-4 text-white ${a.status === "open" ? "bg-red-600" : active ? "bg-orange-500" : "bg-zinc-600"}`}>
         <div className="text-xl font-bold">
           {ctx.hazard === "co" ? "☠️ Carbon monoxide" : "🔥 Fire"} · {locationText(ctx)}

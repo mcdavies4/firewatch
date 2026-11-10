@@ -144,7 +144,15 @@ export async function testAlarm(f: FormData) {
     decoded: co ? { simulated: true, co_ppm: 300 } : { simulated: true, smoke_alarm: "alarm" },
     raw: null,
   });
-  redirect(r.alert ? `/alerts/${r.alert.id}` : "/alerts");
+  if (r.alert) redirect(`/alerts/${r.alert.id}`);
+  // Nothing new was sent because this device already has an open alert: show that one and say why.
+  const { data: open } = await db()
+    .from("alerts")
+    .select("id")
+    .eq("sensor_id", r.sensorId)
+    .in("status", ["open", "acknowledged"])
+    .maybeSingle();
+  redirect(open ? `/alerts/${open.id}?already=1` : "/alerts");
 }
 
 // ---------- Audits ----------

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "simulate": "tsx scripts/simulate.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx scripts/test-normalise.ts && tsx --conditions=react-server scripts/test-nipost.ts && tsx --conditions=react-server --require ./scripts/fake/register.cjs scripts/test-alert-flow.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
