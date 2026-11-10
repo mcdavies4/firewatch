@@ -23,7 +23,7 @@ function friendly(raw: string): string {
     return `${raw} — the sender ID isn't approved yet; clear AT_SMS_SENDER in Vercel to use the default`;
   if (s.includes("invalidphonenumber") || s.includes("unsupportednumbertype") || s.includes("couldnotroute"))
     return `${raw} — check the number; your Africa's Talking account may only send to Nigerian (+234) numbers`;
-  if (s.includes("userindnd") || s.includes("dnd"))
+  if (s.includes("userindnd") || s.includes("dnd") || s.includes("donotdisturb"))
     return `${raw} — this line has Do-Not-Disturb on. On that phone, text ALLOW to 2442 (can take up to 24h). Permanent fix: get your sender ID on Africa's Talking's transactional route`;
   if (s.includes("authentication") || s.includes("apikey") || s.includes("the supplied"))
     return `${raw} — check AT_USERNAME and AT_API_KEY in Vercel`;
