@@ -406,6 +406,7 @@ export async function sendTestSms(f: FormData) {
   const to = phone(s(f, "phone"));
   if (!to) redirect("/demo?sms=failed&why=" + encodeURIComponent("Enter a phone number"));
   const r = await sendSms(to!, "Firewatch test: if you can read this, alert texts are working.");
+  console.log(`[firewatch-sms] test to=${to} status=${r.status} detail=${JSON.stringify(r.detail ?? null).slice(0, 300)}`);
   const why = r.status === "sent" ? `Sent to ${to}` : r.status === "logged" ? "Test mode: NOTIFY_MODE is not \"live\", so nothing was sent" : explainDelivery(r.detail);
   redirect(`/demo?sms=${r.status}&why=${encodeURIComponent(why)}#delivery`);
 }

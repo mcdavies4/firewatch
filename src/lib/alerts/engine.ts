@@ -245,6 +245,9 @@ export async function notifyTier(alertId: string, tier: number) {
   if (!ctx || ctx.alert.status !== "open") return;
 
   const recipients = await recipientsForTier(ctx, tier);
+  console.log(
+    `[firewatch-alert] alert=${alertId} tier=${tier} recipients=${recipients.length} mode=${env.notifyMode()} sender=${process.env.AT_SMS_SENDER || "default"}`,
+  );
   const ackUrl = `${env.appUrl()}/ack/${ctx.alert.ack_token}`;
   const map = mapUrl(ctx);
   const sms =
@@ -283,6 +286,9 @@ async function contactOne(alertId: string, tier: number, r: Recipient, sms: stri
       .select("id")
       .single();
     const res = await sendSms(r.phone, sms).catch(failed);
+    console.log(
+      `[firewatch-sms] alert=${alertId} to=${r.phone} (${r.name}) status=${res.status} detail=${JSON.stringify(res.detail ?? null).slice(0, 300)}`,
+    );
     if (row) {
       await supa
         .from("alert_attempts")
