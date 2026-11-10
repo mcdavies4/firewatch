@@ -50,7 +50,7 @@ export default async function Demo({
       .select("id, dev_eui, device_key, label, kind, status, last_seen_at, shops(id, shop_number, markets(id, name, kind))")
       .not("shop_id", "is", null)
       .order("created_at"),
-    supa.from("alerts").select("id").in("status", ["open", "acknowledged"]),
+    supa.from("alerts").select("id, status, created_at").in("status", ["open", "acknowledged"]),
     supa
       .from("alert_attempts")
       .select("id, created_at, contact_name, contact_phone, status, detail, alert_id")
@@ -67,6 +67,23 @@ export default async function Demo({
   for (const c of contactPhones ?? []) if (c.phone) people.set(c.phone, [...(people.get(c.phone) ?? []), c.name]);
   const linked = new Map((links ?? []).map((l) => [l.phone, l]));
   const tgOn = telegramEnabled();
+
+  // Reminders and escalation need the once-a-minute scheduler (supabase/cron.sql).
+  // If an unanswered alert is over 3 minutes old and has had no reminder, it isn't running.
+  const stale = (openAlerts ?? []).filter(
+    (a) => a.status === "open" && Date.now() - new Date(a.created_at).getTime() > 3 * 60_000,
+  );
+  let schedulerDown = false;
+  if (tgOn && stale.length) {
+    const { data: tgRows } = await supa
+      .from("alert_attempts")
+      .select("alert_id, role")
+      .eq("channel", "telegram")
+      .in("alert_id", stale.map((a) => a.id));
+    const withTg = new Set((tgRows ?? []).map((r) => r.alert_id));
+    const reminded = new Set((tgRows ?? []).filter((r) => r.role === "reminder").map((r) => r.alert_id));
+    schedulerDown = [...withTg].some((id) => !reminded.has(id));
+  }
   if (error) return <DbError message={error.message} />;
 
   const rows = (data ?? []) as unknown as Row[];
@@ -277,6 +294,20 @@ export default async function Demo({
               );
             })}
           </ul>
+        )}
+        {tgOn && (
+          <p className="text-sm text-zinc-800">
+            ⏰ If nobody presses I&apos;M RESPONDING, the alert is sent again every minute, up to 5 times.
+          </p>
+        )}
+        {schedulerDown && (
+          <div className="space-y-1 rounded border-2 border-amber-700 bg-amber-100 p-3 text-amber-950">
+            <b>The once-a-minute scheduler isn&apos;t running</b>, so repeat pings and escalation to the next people
+            won&apos;t happen. In Supabase, enable the <code className="font-mono">pg_cron</code> and{" "}
+            <code className="font-mono">pg_net</code> extensions, then run{" "}
+            <code className="font-mono">supabase/cron.sql</code> with your Vercel address and{" "}
+            <code className="font-mono">CRON_SECRET</code> filled in.
+          </div>
         )}
         {tgOn && (
           <p className="text-sm text-zinc-700">

@@ -90,6 +90,33 @@ for (const [m, voice] of [["ok", ""], ["ok", "+2347000000000"], ["sms-throws", "
   await acknowledge(r.alert!.id, "Musa");
   check("responding update goes to Telegram too", sent.some((x) => x.startsWith("TG 555") && x.includes("Musa is responding")));
 }
+// Telegram reminders until someone responds
+{
+  seed(); sent.length = 0; mode = "dnd";
+  tables.contacts[0].phone = "+2348030000000";
+  tables.telegram_links = [{ phone: "+2348030000000", chat_id: 555 }];
+  console.log("\nTelegram reminders");
+  const { telegramReminders, acknowledge } = await import("../src/lib/alerts/engine");
+  const r = await drill();
+  const age = (secs: number) => { for (const x of rows()) x.created_at = new Date(Date.now() - secs * 1000).toISOString(); };
+  check("no reminder straight away", (await telegramReminders()).length === 0);
+  age(61);
+  const r1 = await telegramReminders();
+  check("reminder 1 after a minute", r1.length === 1 && sent.some((x) => x.includes("STILL NO ONE RESPONDING (1/5)")));
+  check("no double reminder in the same minute", (await telegramReminders()).length === 0);
+  for (let i = 2; i <= 5; i++) { age(61); await telegramReminders(); }
+  check("reminders 2-5 sent", sent.some((x) => x.includes("(5/5)")));
+  age(61);
+  check("stops after 5", (await telegramReminders()).length === 0);
+
+  seed(); sent.length = 0;
+  tables.telegram_links = [{ phone: "+2348030000000", chat_id: 555 }];
+  const r2 = await drill();
+  await acknowledge(r2.alert!.id, "Musa");
+  age(61);
+  check("no reminders once someone responds", (await telegramReminders()).length === 0);
+  void r;
+}
 console.log(fail ? `\n${fail} FAILED` : "\nALL PASS");
 if (fail) process.exit(1);
 }

@@ -117,7 +117,7 @@ export default async function AlertDetail({
                   {t.contact_name} <span className="text-zinc-600">{t.contact_phone}</span>
                 </td>
                 <td className="p-2">{t.role}</td>
-                <td className="p-2 whitespace-nowrap">{t.channel === "voice" ? "📞 Call" : t.channel === "telegram" ? "✈️ Telegram" : "💬 Text"}</td>
+                <td className="p-2 whitespace-nowrap">{t.channel === "voice" ? "📞 Call" : t.channel === "telegram" ? (t.role === "reminder" ? "⏰ Telegram reminder" : "✈️ Telegram") : "💬 Text"}</td>
                 <td className="p-2">
                   <span className={t.status === "failed" ? "font-bold text-red-700" : t.status === "logged" ? "font-bold text-amber-800" : ""}>
                     {t.status}

@@ -367,6 +367,64 @@ async function contactOne(alertId: string, tier: number, r: Recipient, sms: stri
   for (const x of results) if (x.status === "rejected") console.error("contact failed", r.phone, x.reason);
 }
 
+const REMINDER_SECONDS = () => Number(process.env.TELEGRAM_REMINDER_SECONDS ?? 60);
+const MAX_REMINDERS = () => Number(process.env.TELEGRAM_MAX_REMINDERS ?? 5);
+
+/**
+ * Called every minute by cron: while nobody has pressed I'M RESPONDING, re-send the
+ * Telegram alert to everyone who got it (every minute, up to 5 times) so phones keep buzzing.
+ */
+export async function telegramReminders() {
+  if (!telegramEnabled()) return [];
+  const supa = db();
+  const { data: open } = await supa.from("alerts").select("id").eq("status", "open");
+  const done: { id: string; round: number }[] = [];
+  for (const a of open ?? []) {
+    const { data: rows } = await supa
+      .from("alert_attempts")
+      .select("role, contact_name, created_at, detail, status")
+      .eq("alert_id", a.id)
+      .eq("channel", "telegram");
+    if (!rows?.length) continue;
+    const originals = rows.filter((r) => r.role !== "reminder" && r.status === "sent");
+    const chats = [...new Set(originals.map((r) => (r.detail as { chat_id?: number } | null)?.chat_id).filter(Boolean))] as number[];
+    if (!chats.length) continue;
+    const round = new Set(rows.filter((r) => r.role === "reminder").map((r) => r.contact_name)).size;
+    const last = Math.max(...rows.map((r) => new Date(r.created_at).getTime()));
+    if (round >= MAX_REMINDERS() || Date.now() - last < REMINDER_SECONDS() * 1000 - 5000) continue;
+
+    const ctx = await getAlertContext(a.id);
+    if (!ctx || ctx.alert.status !== "open") continue;
+    const n = round + 1;
+    const map = mapUrl(ctx);
+    const text =
+      `⏰ STILL NO ONE RESPONDING (${n}/${MAX_REMINDERS()})\n\n` +
+      `${ctx.hazard === "co" ? "☠️" : "🔥"} ${hazardTitle(ctx)}\n📍 ${locationText(ctx)}\n` +
+      (map ? `🗺 ${map}\n` : "") +
+      `\n${hazardAdvice(ctx)}`;
+    const ackUrl = `${env.appUrl()}/ack/${ctx.alert.ack_token}`;
+    await Promise.allSettled(
+      chats.map(async (chatId) => {
+        const res = await sendTelegram(chatId, text, { text: "🚨 I'M RESPONDING", url: ackUrl });
+        await supa.from("alert_attempts").insert({
+          alert_id: a.id,
+          tier: ctx.alert.current_tier,
+          contact_name: `Reminder ${n}`,
+          contact_phone: "",
+          role: "reminder",
+          channel: "telegram",
+          provider_ref: res.ref,
+          status: res.status,
+          detail: res.detail as object,
+        });
+      }),
+    );
+    console.log(`[firewatch-telegram] reminder ${n} alert=${a.id} chats=${chats.length}`);
+    done.push({ id: a.id, round: n });
+  }
+  return done;
+}
+
 /** Called every minute by cron: moves unacknowledged alerts up the chain. */
 export async function escalateDue() {
   const supa = db();
