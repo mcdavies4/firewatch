@@ -8,6 +8,8 @@ import { db } from "@/lib/supabase";
 import { acknowledge, closeAlert, handleUplink } from "@/lib/alerts/engine";
 import { AUDIT_ITEMS, PASS_MARK } from "@/lib/ui";
 import { checkPostcode, postcodeColumns, postcodeForPin } from "@/lib/nipost";
+import { sendSms } from "@/lib/notify/africastalking";
+import { explainDelivery } from "@/lib/notify/explain";
 
 /** Server actions are reachable from any page, so admin ones re-check the dashboard login. */
 async function requireAdmin() {
@@ -388,4 +390,14 @@ export async function closeAllAlerts() {
   revalidatePath("/demo");
   revalidatePath("/dashboard");
   revalidatePath("/homes");
+}
+
+/** Sends one SMS straight through Africa's Talking and reports the raw result on the Demo page. */
+export async function sendTestSms(f: FormData) {
+  await requireAdmin();
+  const to = phone(s(f, "phone"));
+  if (!to) redirect("/demo?sms=failed&why=" + encodeURIComponent("Enter a phone number"));
+  const r = await sendSms(to!, "Firewatch test: if you can read this, alert texts are working.");
+  const why = r.status === "sent" ? `Sent to ${to}` : r.status === "logged" ? "Test mode: NOTIFY_MODE is not \"live\", so nothing was sent" : explainDelivery(r.detail);
+  redirect(`/demo?sms=${r.status}&why=${encodeURIComponent(why)}#delivery`);
 }

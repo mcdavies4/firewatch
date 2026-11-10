@@ -4,6 +4,7 @@ import { getAlertContext, locationText, mapUrl } from "@/lib/alerts/engine";
 import { ackFromDashboard, closeAlertAction } from "@/app/actions";
 import AutoRefresh from "@/components/AutoRefresh";
 import PostcodeBadge from "@/components/PostcodeBadge";
+import { explainDelivery } from "@/lib/notify/explain";
 
 export const dynamic = "force-dynamic";
 
@@ -104,7 +105,15 @@ export default async function AlertDetail({ params }: { params: Promise<{ id: st
                 </td>
                 <td className="p-2">{t.role}</td>
                 <td className="p-2">{t.channel}</td>
-                <td className="p-2">{t.status}</td>
+                <td className="p-2">
+                  <span className={t.status === "failed" ? "font-bold text-red-700" : t.status === "logged" ? "font-bold text-amber-800" : ""}>
+                    {t.status}
+                  </span>
+                  {t.status === "logged" && <div className="text-xs text-amber-900">Test mode: NOTIFY_MODE is not &quot;live&quot;</div>}
+                  {(t.status === "failed" || t.status === "skipped") && (
+                    <div className="max-w-xs text-xs break-words text-red-800">{explainDelivery(t.detail)}</div>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

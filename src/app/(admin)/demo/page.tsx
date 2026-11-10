@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { db } from "@/lib/supabase";
 import { STATUS_STYLE } from "@/lib/ui";
-import { closeAllAlerts, createDemo, enableVirtualSensor, testAlarm } from "@/app/actions";
+import { closeAllAlerts, createDemo, enableVirtualSensor, sendTestSms, testAlarm } from "@/app/actions";
+import { explainDelivery } from "@/lib/notify/explain";
 import AutoRefresh from "@/components/AutoRefresh";
 import DbError from "@/components/DbError";
 
@@ -21,15 +22,26 @@ type Row = {
   } | null;
 };
 
-export default async function Demo() {
+export default async function Demo({ searchParams }: { searchParams: Promise<{ sms?: string; why?: string }> }) {
+  const { sms, why } = await searchParams;
   const supa = db();
-  const [{ data, error }, { data: openAlerts }] = await Promise.all([
+  const live = process.env.NOTIFY_MODE === "live";
+  const atReady = !!process.env.AT_USERNAME && !!process.env.AT_API_KEY;
+  const sender = process.env.AT_SMS_SENDER || null;
+  const sandbox = process.env.AT_ENV === "sandbox";
+  const [{ data, error }, { data: openAlerts }, { data: recentSms }] = await Promise.all([
     supa
       .from("sensors")
       .select("id, dev_eui, device_key, label, kind, status, shops(id, shop_number, markets(id, name, kind))")
       .not("shop_id", "is", null)
       .order("created_at"),
     supa.from("alerts").select("id").in("status", ["open", "acknowledged"]),
+    supa
+      .from("alert_attempts")
+      .select("id, created_at, contact_name, contact_phone, status, detail, alert_id")
+      .eq("channel", "sms")
+      .order("created_at", { ascending: false })
+      .limit(6),
   ]);
   if (error) return <DbError message={error.message} />;
 
@@ -120,6 +132,58 @@ export default async function Demo() {
       <p className="text-sm text-zinc-700">
         Quick test with no second phone: the 🔥 Fire and ☠️ CO buttons fire the alarm straight from here.
       </p>
+
+      <section id="delivery" className="space-y-3 rounded-lg border-2 border-zinc-900 bg-white p-4">
+        <h2 className="text-lg font-bold">📶 Text delivery check</h2>
+        <ul className="space-y-1 text-zinc-900">
+          <li>
+            {live ? "✅" : "❌"} Sending mode: <b>{live ? "live" : "test (texts are only logged)"}</b>
+            {!live && <span> — set <code className="font-mono">NOTIFY_MODE=live</code> in Vercel and redeploy</span>}
+          </li>
+          <li>
+            {atReady ? "✅" : "❌"} Africa&apos;s Talking keys {atReady ? "set" : "missing — add AT_USERNAME and AT_API_KEY in Vercel"}
+            {sandbox && <b className="text-amber-800"> · SANDBOX mode: texts only appear in the AT simulator, not on real phones</b>}
+          </li>
+          <li>
+            ℹ️ Sender ID: <b>{sender ?? "default (none set)"}</b>
+            {sender && <span className="text-zinc-700"> — if texts fail, it may not be approved yet; clear AT_SMS_SENDER</span>}
+          </li>
+          <li>ℹ️ Use a Nigerian number (+234) unless your Africa&apos;s Talking account can send abroad.</li>
+        </ul>
+
+        {sms && (
+          <div
+            className={`rounded p-3 font-semibold ${sms === "sent" ? "bg-emerald-100 text-emerald-900" : "bg-red-100 text-red-900"}`}
+          >
+            {sms === "sent" ? "✅ " : "❌ "}
+            {why}
+          </div>
+        )}
+
+        <form action={sendTestSms} className="flex flex-wrap gap-2">
+          <input name="phone" required placeholder="Phone (0803… or +234…)" className="w-60 rounded border p-2" />
+          <button className="rounded bg-zinc-900 px-4 py-2 font-semibold text-white">Send test SMS</button>
+        </form>
+
+        {!!recentSms?.length && (
+          <div>
+            <div className="mb-1 text-sm font-semibold">Last alert texts</div>
+            <ul className="space-y-1 text-sm">
+              {recentSms.map((t) => (
+                <li key={t.id} className="text-zinc-900">
+                  <Link href={`/alerts/${t.alert_id}`} className="underline">
+                    {new Date(t.created_at).toLocaleTimeString("en-GB")}
+                  </Link>{" "}
+                  → {t.contact_name} {t.contact_phone}:{" "}
+                  <b className={t.status === "sent" ? "text-emerald-800" : "text-red-700"}>{t.status}</b>
+                  {t.status === "logged" && " (test mode)"}
+                  {t.status === "failed" && ` — ${explainDelivery(t.detail)}`}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
       <div className="flex flex-wrap items-center gap-3">
         <form action={closeAllAlerts}>
