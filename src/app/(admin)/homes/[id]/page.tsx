@@ -130,6 +130,15 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
                   <input type="hidden" name="hazard" value="co" />
                   <button className="rounded bg-purple-700 px-3 py-1.5 text-sm font-semibold text-white">CO drill</button>
                 </form>
+                {s.device_key && (
+                  <a
+                    href={`/sensor/${s.dev_eui}?k=${s.device_key}`}
+                    target="_blank"
+                    className="rounded border border-zinc-900 px-3 py-1.5 text-sm font-semibold"
+                  >
+                    📱 Open virtual sensor
+                  </a>
+                )}
               </div>
               {s.device_key && (
                 <details className="text-xs">
