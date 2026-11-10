@@ -18,11 +18,40 @@ export default function VirtualSensor({
   const [mode, setMode] = useState<Mode>("idle");
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<string[]>([]);
+  const [online, setOnline] = useState<boolean | null>(null);
+  const [lastBeat, setLastBeat] = useState<string | null>(null);
   const audio = useRef<AudioContext | null>(null);
   const beepTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const note = (line: string) =>
     setLog((l) => [`${new Date().toLocaleTimeString("en-GB")}  ${line}`, ...l].slice(0, 6));
+
+  // Heartbeat every 60s while this page is open, like the real unit, so the
+  // dashboard shows the device online. Sent straight away on open too.
+  useEffect(() => {
+    let stop = false;
+    const beat = async () => {
+      try {
+        const res = await fetch("/api/device", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Device-Key": deviceKey },
+          body: JSON.stringify({ device_id: deviceId, event: "heartbeat", virtual: true, co_ppm: 2, battery: 96 }),
+        });
+        if (!stop) {
+          setOnline(res.ok);
+          if (res.ok) setLastBeat(new Date().toLocaleTimeString("en-GB"));
+        }
+      } catch {
+        if (!stop) setOnline(false);
+      }
+    };
+    beat();
+    const t = setInterval(beat, 60_000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [deviceId, deviceKey]);
 
   // Alarm sound: fast beeps for fire, 4-beep pattern for CO (like real alarms).
   useEffect(() => {
@@ -99,6 +128,13 @@ export default function VirtualSensor({
       <div className="text-sm uppercase tracking-widest text-zinc-300">Firewatch · virtual sensor</div>
       <h1 className="mt-1 text-center text-xl font-bold">{home}</h1>
       <div className="text-sm text-zinc-300">{label}</div>
+      <div
+        className={`mt-3 rounded-full px-3 py-1 text-sm font-semibold ${
+          online === null ? "bg-zinc-800 text-zinc-200" : online ? "bg-emerald-600 text-white" : "bg-red-700 text-white"
+        }`}
+      >
+        {online === null ? "Connecting…" : online ? `● Online · checked in ${lastBeat}` : "● Offline — check internet"}
+      </div>
 
       {/* The "device" */}
       <div className="mt-8 flex h-56 w-56 items-center justify-center rounded-full bg-zinc-100 shadow-[0_0_60px_rgba(255,255,255,0.08)]">

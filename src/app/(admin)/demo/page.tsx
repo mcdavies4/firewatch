@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/supabase";
-import { STATUS_STYLE } from "@/lib/ui";
+import { STATUS_STYLE, ago } from "@/lib/ui";
 import { closeAllAlerts, createDemo, enableVirtualSensor, sendTestSms, testAlarm } from "@/app/actions";
 import { explainDelivery } from "@/lib/notify/explain";
 import AutoRefresh from "@/components/AutoRefresh";
@@ -15,6 +15,7 @@ type Row = {
   label: string | null;
   kind: string;
   status: string;
+  last_seen_at: string | null;
   shops: {
     id: string;
     shop_number: string;
@@ -32,7 +33,7 @@ export default async function Demo({ searchParams }: { searchParams: Promise<{ s
   const [{ data, error }, { data: openAlerts }, { data: recentSms }] = await Promise.all([
     supa
       .from("sensors")
-      .select("id, dev_eui, device_key, label, kind, status, shops(id, shop_number, markets(id, name, kind))")
+      .select("id, dev_eui, device_key, label, kind, status, last_seen_at, shops(id, shop_number, markets(id, name, kind))")
       .not("shop_id", "is", null)
       .order("created_at"),
     supa.from("alerts").select("id").in("status", ["open", "acknowledged"]),
@@ -63,7 +64,7 @@ export default async function Demo({ searchParams }: { searchParams: Promise<{ s
             {site?.name} — {where}
           </div>
           <div className="text-sm text-zinc-700">
-            {st.label} ·{" "}
+            {st.label} · checked in {ago(r.last_seen_at)} ·{" "}
             <Link href={page} className="underline">
               open page
             </Link>
