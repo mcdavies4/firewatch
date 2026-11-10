@@ -12,6 +12,7 @@ export function explainDelivery(detail: unknown): string {
   if (d.SMSMessageData?.Message) return friendly(d.SMSMessageData.Message);
   if (d.entries?.[0]?.errorMessage) return friendly(d.entries[0].errorMessage);
   if (d.errorMessage) return friendly(d.errorMessage);
+  if ((d as { description?: string }).description) return friendly(String((d as { description?: string }).description));
   return friendly(JSON.stringify(detail).slice(0, 200));
 }
 
@@ -27,6 +28,8 @@ function friendly(raw: string): string {
     return `${raw} — this line has Do-Not-Disturb on. On that phone, text ALLOW to 2442 (can take up to 24h). Permanent fix: get your sender ID on Africa's Talking's transactional route`;
   if (s.includes("authentication") || s.includes("apikey") || s.includes("the supplied"))
     return `${raw} — check AT_USERNAME and AT_API_KEY in Vercel`;
+  if (s.includes("chat not found") || s.includes("bot was blocked"))
+    return `${raw} — this person needs to open the Connect link and press Start in Telegram again`;
   if (s.includes("no at_voice_number")) return "Calls are off until you buy an Africa's Talking voice number (texts still send)";
   return raw;
 }

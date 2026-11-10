@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- test fake */
 // In-memory stand-in for src/lib/supabase.ts, used by scripts/test-alert-flow.ts only.
 type Row = Record<string, any>;
 export const tables: Record<string, Row[]> = {};

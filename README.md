@@ -71,6 +71,17 @@ Code: `src/lib/nipost.ts`. Database: run `supabase/migrations/003_nipost.sql` af
 
 **Switching on live NIPOST checks:** get an API key from the developer dashboard at postcode.gov.ng, add `NIPOST_API_KEY` (and optionally `NIPOST_LOOKUP_LEVEL`, default 2) in Vercel, redeploy. Without a key everything still works and the format is checked offline. Test: `npx tsx --conditions=react-server scripts/test-nipost.ts EK-01-A03-FK-01`.
 
+## ✈️ Telegram alerts
+
+SMS to Nigerian lines with Do-Not-Disturb is rejected unless you have a transactional sender ID. Telegram alerts aren't affected: anyone who connects gets every alert on Telegram as well (address, NIPOST postcode, map, **I'M RESPONDING** button), plus the "X is responding" update.
+
+1. Telegram → **@BotFather** → `/newbot` → copy the token.
+2. Vercel: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` → redeploy.
+3. Supabase: run `supabase/migrations/004_telegram.sql`.
+4. **Demo → Connect Telegram bot**, then **📲 Connect on Telegram** next to a phone number and press **Start** in Telegram.
+
+Links are per phone number, so one connection covers every role that number has (owner, security, family…).
+
 ## Escalation
 
 - **Tier 0** (immediately): shop owner (+ backup number) and tier-0 responders, e.g. night security.

@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "../supabase";
 import { env } from "../env";
 import { placeCall, sendSms, voiceEnabled, type SendResult } from "../notify/africastalking";
+import { sendTelegram, telegramEnabled } from "../notify/telegram";
 import type { NormalisedUplink } from "../ingest/normalise";
 
 // ---------- Types ----------
@@ -256,12 +257,60 @@ export async function notifyTier(alertId: string, tier: number) {
     (map ? `Map: ${map} ` : "") +
     `Tap to confirm you're responding: ${ackUrl}`;
 
-  // Texts go first and never wait on (or fail because of) the call.
-  await Promise.allSettled(recipients.map((r) => contactOne(alertId, tier, r, sms)));
+  // Texts go first and never wait on (or fail because of) the call. Telegram runs alongside.
+  await Promise.allSettled([
+    ...recipients.map((r) => contactOne(alertId, tier, r, sms)),
+    telegramTier(alertId, tier, recipients, ctx, ackUrl, map),
+  ]);
 
   const maxTier = await highestTier(ctx.alert.market_id);
   const next = tier < maxTier ? new Date(Date.now() + env.escalationSeconds() * 1000).toISOString() : null;
   await supa.from("alerts").update({ current_tier: tier, next_escalation_at: next }).eq("id", alertId);
+}
+
+/** Sends the alert on Telegram to every recipient phone that has linked a Telegram chat (once per chat). */
+async function telegramTier(
+  alertId: string,
+  tier: number,
+  recipients: Recipient[],
+  ctx: AlertContext,
+  ackUrl: string,
+  map: string | null,
+) {
+  if (!telegramEnabled() || !recipients.length) return;
+  const supa = db();
+  const phones = [...new Set(recipients.map((r) => r.phone))];
+  const { data: links } = await supa.from("telegram_links").select("phone, chat_id").in("phone", phones);
+  const byChat = new Map<number, Recipient[]>();
+  for (const l of links ?? []) {
+    const list = byChat.get(l.chat_id) ?? [];
+    list.push(...recipients.filter((r) => r.phone === l.phone));
+    byChat.set(l.chat_id, list);
+  }
+  const icon = ctx.hazard === "co" ? "☠️" : "🔥";
+  const text =
+    `${icon} ${hazardTitle(ctx)}${ctx.hazard === "fire" ? " — smoke/heat" : ""}\n\n` +
+    `📍 ${locationText(ctx)}\n` +
+    (ctx.postcode ? `📮 NIPOST ${ctx.postcode}${ctx.postcodeStatus === "verified" ? " ✓ verified" : ""}\n` : "") +
+    (map ? `🗺 ${map}\n` : "") +
+    `\n${hazardAdvice(ctx)}`;
+  await Promise.allSettled(
+    [...byChat.entries()].map(async ([chatId, rs]) => {
+      const res = await sendTelegram(chatId, text, { text: "🚨 I'M RESPONDING", url: ackUrl });
+      console.log(`[firewatch-telegram] alert=${alertId} chat=${chatId} status=${res.status}`);
+      await supa.from("alert_attempts").insert({
+        alert_id: alertId,
+        tier,
+        contact_name: [...new Set(rs.map((r) => r.name))].join(", "),
+        contact_phone: rs[0].phone,
+        role: [...new Set(rs.map((r) => r.role))].join(", "),
+        channel: "telegram",
+        provider_ref: res.ref,
+        status: res.status,
+        detail: res.detail as object,
+      });
+    }),
+  );
 }
 
 /** sendSms that logs instead of throwing, for follow-up messages. */
@@ -368,15 +417,19 @@ export async function acknowledge(alertId: string, by: string) {
     .eq("alert_id", alertId)
     .eq("channel", "sms");
   const phones = [...new Set((attempts ?? []).map((a) => a.contact_phone))];
+  const { data: tgAttempts } = await supa
+    .from("alert_attempts")
+    .select("detail")
+    .eq("alert_id", alertId)
+    .eq("channel", "telegram")
+    .eq("status", "sent");
+  const chats = [...new Set((tgAttempts ?? []).map((a) => (a.detail as { chat_id?: number } | null)?.chat_id).filter(Boolean))];
   if (ctx) {
-    await Promise.all(
-      phones.map((p) =>
-        safeSms(
-          p,
-          `UPDATE: ${by} is responding to the ${ctx.hazard === "co" ? "carbon monoxide" : "fire"} alert at ${locationText(ctx)}.`,
-        ),
-      ),
-    );
+    const update = `UPDATE: ${by} is responding to the ${ctx.hazard === "co" ? "carbon monoxide" : "fire"} alert at ${locationText(ctx)}.`;
+    await Promise.allSettled([
+      ...phones.map((p) => safeSms(p, update)),
+      ...chats.map((c) => sendTelegram(c as number, `✅ ${update}`)),
+    ]);
   }
   return true;
 }

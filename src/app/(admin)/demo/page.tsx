@@ -1,7 +1,16 @@
 import Link from "next/link";
 import { db } from "@/lib/supabase";
 import { STATUS_STYLE, ago } from "@/lib/ui";
-import { closeAllAlerts, createDemo, enableVirtualSensor, sendTestSms, testAlarm } from "@/app/actions";
+import {
+  closeAllAlerts,
+  createDemo,
+  enableVirtualSensor,
+  sendTestSms,
+  sendTestTelegram,
+  setupTelegram,
+  testAlarm,
+} from "@/app/actions";
+import { botUsername, linkUrl, telegramEnabled } from "@/lib/notify/telegram";
 import { explainDelivery } from "@/lib/notify/explain";
 import { voiceEnabled } from "@/lib/notify/africastalking";
 import AutoRefresh from "@/components/AutoRefresh";
@@ -24,14 +33,18 @@ type Row = {
   } | null;
 };
 
-export default async function Demo({ searchParams }: { searchParams: Promise<{ sms?: string; why?: string }> }) {
-  const { sms, why } = await searchParams;
+export default async function Demo({
+  searchParams,
+}: {
+  searchParams: Promise<{ sms?: string; why?: string; tg?: string }>;
+}) {
+  const { sms, why, tg: tgResult } = await searchParams;
   const supa = db();
   const live = process.env.NOTIFY_MODE === "live";
   const atReady = !!process.env.AT_USERNAME && !!process.env.AT_API_KEY;
   const sender = process.env.AT_SMS_SENDER || null;
   const sandbox = process.env.AT_ENV === "sandbox";
-  const [{ data, error }, { data: openAlerts }, { data: recentSms }] = await Promise.all([
+  const [{ data, error }, { data: openAlerts }, { data: recentSms }, { data: ownerPhones }, { data: contactPhones }, { data: links }] = await Promise.all([
     supa
       .from("sensors")
       .select("id, dev_eui, device_key, label, kind, status, last_seen_at, shops(id, shop_number, markets(id, name, kind))")
@@ -44,7 +57,16 @@ export default async function Demo({ searchParams }: { searchParams: Promise<{ s
       .eq("channel", "sms")
       .order("created_at", { ascending: false })
       .limit(6),
+    supa.from("shops").select("owner_name, owner_phone"),
+    supa.from("contacts").select("name, phone").eq("active", true),
+    supa.from("telegram_links").select("phone, telegram_name, linked_at"),
   ]);
+  // Everyone who can receive alerts, once per phone number.
+  const people = new Map<string, string[]>();
+  for (const o of ownerPhones ?? []) if (o.owner_phone) people.set(o.owner_phone, [...(people.get(o.owner_phone) ?? []), o.owner_name]);
+  for (const c of contactPhones ?? []) if (c.phone) people.set(c.phone, [...(people.get(c.phone) ?? []), c.name]);
+  const linked = new Map((links ?? []).map((l) => [l.phone, l]));
+  const tgOn = telegramEnabled();
   if (error) return <DbError message={error.message} />;
 
   const rows = (data ?? []) as unknown as Row[];
@@ -189,6 +211,78 @@ export default async function Demo({ searchParams }: { searchParams: Promise<{ s
               ))}
             </ul>
           </div>
+        )}
+      </section>
+
+      <section id="telegram" className="space-y-3 rounded-lg border-2 border-sky-700 bg-white p-4">
+        <h2 className="text-lg font-bold">✈️ Telegram alerts (not blocked by DND)</h2>
+        <p className="text-sm text-zinc-800">
+          Anyone who connects gets every alert on Telegram as well as by SMS: address, NIPOST postcode, map and an
+          I&apos;M RESPONDING button. It&apos;s free and instant, and works for family abroad.
+        </p>
+        {!tgOn ? (
+          <ol className="list-decimal space-y-1 pl-6 text-zinc-900">
+            <li>
+              In Telegram, open <b>@BotFather</b>, send <code className="font-mono">/newbot</code>, name it (e.g.
+              &quot;Firewatch Alerts&quot;) and pick a username ending in <code className="font-mono">bot</code>.
+            </li>
+            <li>
+              In Vercel add <code className="font-mono">TELEGRAM_BOT_TOKEN</code> (the token BotFather gives you) and{" "}
+              <code className="font-mono">TELEGRAM_BOT_USERNAME</code> (the bot&apos;s username), then redeploy.
+            </li>
+            <li>Come back here and press Connect Telegram bot.</li>
+          </ol>
+        ) : (
+          <p className="text-zinc-900">
+            ✅ Bot: <b>@{botUsername()}</b>
+          </p>
+        )}
+        {tgResult && (
+          <div className={`rounded p-3 font-semibold ${tgResult === "ok" ? "bg-emerald-100 text-emerald-900" : "bg-red-100 text-red-900"}`}>
+            {tgResult === "ok" ? "✅ " : "❌ "}
+            {why}
+          </div>
+        )}
+        <form action={setupTelegram}>
+          <button className="rounded bg-sky-700 px-4 py-2 font-semibold text-white">Connect Telegram bot</button>
+        </form>
+        {tgOn && people.size > 0 && (
+          <ul className="space-y-2">
+            {[...people.entries()].map(([ph, names]) => {
+              const l = linked.get(ph);
+              return (
+                <li key={ph} className="flex flex-wrap items-center justify-between gap-2 rounded border p-2">
+                  <div>
+                    <b>{ph}</b> <span className="text-sm text-zinc-700">({[...new Set(names)].join(", ")})</span>
+                    <div className="text-sm">
+                      {l ? (
+                        <span className="font-semibold text-emerald-800">✓ Connected{l.telegram_name ? ` as ${l.telegram_name}` : ""}</span>
+                      ) : (
+                        <span className="text-zinc-700">Not connected</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <a href={linkUrl(ph)} target="_blank" className="rounded bg-sky-700 px-3 py-1.5 text-sm font-semibold text-white">
+                      {l ? "Reconnect" : "📲 Connect on Telegram"}
+                    </a>
+                    {l && (
+                      <form action={sendTestTelegram}>
+                        <input type="hidden" name="phone" value={ph} />
+                        <button className="rounded border-2 border-sky-700 px-3 py-1.5 text-sm font-semibold">Test</button>
+                      </form>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {tgOn && (
+          <p className="text-sm text-zinc-700">
+            Open the Connect link on the phone that has Telegram and press <b>Start</b>. You can also copy the link and
+            send it to a family member.
+          </p>
         )}
       </section>
 

@@ -10,6 +10,8 @@ import { AUDIT_ITEMS, PASS_MARK } from "@/lib/ui";
 import { checkPostcode, postcodeColumns, postcodeForPin } from "@/lib/nipost";
 import { sendSms } from "@/lib/notify/africastalking";
 import { explainDelivery } from "@/lib/notify/explain";
+import { sendTelegram, telegramEnabled, telegramSecret, tg } from "@/lib/notify/telegram";
+import { env } from "@/lib/env";
 
 /** Server actions are reachable from any page, so admin ones re-check the dashboard login. */
 async function requireAdmin() {
@@ -409,4 +411,31 @@ export async function sendTestSms(f: FormData) {
   console.log(`[firewatch-sms] test to=${to} status=${r.status} detail=${JSON.stringify(r.detail ?? null).slice(0, 300)}`);
   const why = r.status === "sent" ? `Sent to ${to}` : r.status === "logged" ? "Test mode: NOTIFY_MODE is not \"live\", so nothing was sent" : explainDelivery(r.detail);
   redirect(`/demo?sms=${r.status}&why=${encodeURIComponent(why)}#delivery`);
+}
+
+/** Points the Telegram bot at this app (webhook) — press once after adding the bot token in Vercel. */
+export async function setupTelegram() {
+  await requireAdmin();
+  if (!telegramEnabled()) {
+    redirect("/demo?tg=failed&why=" + encodeURIComponent("Add TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_USERNAME in Vercel, redeploy, then try again") + "#telegram");
+  }
+  const r = await tg("setWebhook", {
+    url: `${env.appUrl()}/api/telegram`,
+    secret_token: telegramSecret(),
+    allowed_updates: ["message"],
+  });
+  const why = r.ok
+    ? "Bot connected. Now tap Connect on your number below."
+    : `Telegram said: ${(r.json as { description?: string } | null)?.description ?? "error"}. Check the bot token and that APP_URL is your https Vercel address.`;
+  redirect(`/demo?tg=${r.ok ? "ok" : "failed"}&why=${encodeURIComponent(why)}#telegram`);
+}
+
+/** Sends a test Telegram message to a linked phone. */
+export async function sendTestTelegram(f: FormData) {
+  await requireAdmin();
+  const p = s(f, "phone")!;
+  const { data: link } = await db().from("telegram_links").select("chat_id").eq("phone", p).maybeSingle();
+  if (!link) redirect("/demo?tg=failed&why=" + encodeURIComponent(`${p} hasn't connected Telegram yet`) + "#telegram");
+  const r = await sendTelegram(link!.chat_id, "🔥 Firewatch test: if you can read this, Telegram alerts are working.");
+  redirect(`/demo?tg=${r.status === "sent" ? "ok" : "failed"}&why=${encodeURIComponent(r.status === "sent" ? `Sent to ${p} on Telegram` : explainDelivery(r.detail))}#telegram`);
 }

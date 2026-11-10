@@ -10,13 +10,20 @@ process.env.AT_USERNAME = "test";
 process.env.AT_API_KEY = "k";
 process.env.APP_URL = "https://firewatch.test";
 
-let mode: "ok" | "sms-throws" | "call-throws" = "ok";
+let mode: "ok" | "sms-throws" | "call-throws" | "dnd" = "ok";
 const sent: string[] = [];
 globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
   const u = String(url);
   const body = new URLSearchParams(String(init?.body ?? ""));
+  if (u.includes("api.telegram.org")) {
+    const b = JSON.parse(String(init?.body ?? "{}"));
+    sent.push(`TG ${b.chat_id}: ${b.text} [${b.reply_markup?.inline_keyboard?.[0]?.[0]?.text ?? ""}]`);
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 9 } }));
+  }
   if (u.includes("messaging")) {
     if (mode === "sms-throws") throw new Error("socket hang up");
+    if (mode === "dnd")
+      return new Response(JSON.stringify({ SMSMessageData: { Recipients: [{ status: "DoNotDisturbRejection" }] } }));
     sent.push(`SMS ${body.get("to")}: ${body.get("message")}`);
     return new Response(JSON.stringify({ SMSMessageData: { Recipients: [{ status: "Success", messageId: "m1" }] } }));
   }
@@ -63,6 +70,25 @@ for (const [m, voice] of [["ok", ""], ["ok", "+2347000000000"], ["sms-throws", "
   check("SMS contains NIPOST postcode", m === "sms-throws" || sent.some((x) => x.includes("NIPOST EK-01-A03-FK-01")));
   const second = await drill();
   check("second drill while open does not re-text", second.alert === null && rows().filter((x) => x.channel === "sms").length === 2);
+}
+// Telegram: SMS blocked by DND, owner has linked Telegram; security shares the same phone
+{
+  seed(); sent.length = 0; mode = "dnd"; delete process.env.AT_VOICE_NUMBER;
+  process.env.TELEGRAM_BOT_TOKEN = "123:abc"; process.env.TELEGRAM_BOT_USERNAME = "FirewatchBot";
+  tables.contacts[0].phone = "+2348030000000"; // same number as the owner, like the demo
+  tables.telegram_links = [{ phone: "+2348030000000", chat_id: 555 }];
+  console.log("\nDND on SMS, Telegram linked");
+  const r = await drill();
+  const sms = rows().filter((x) => x.channel === "sms");
+  const tgRows = rows().filter((x) => x.channel === "telegram");
+  check("SMS rows failed with DoNotDisturbRejection", sms.length === 2 && sms.every((x) => x.status === "failed"));
+  check("one Telegram message per chat (not per role)", tgRows.length === 1 && tgRows[0].status === "sent");
+  const msg = sent.find((x) => x.startsWith("TG 555")) ?? "";
+  check("Telegram has postcode and I'M RESPONDING button", msg.includes("NIPOST EK-01-A03-FK-01") && msg.includes("I'M RESPONDING"));
+  const { acknowledge } = await import("../src/lib/alerts/engine");
+  sent.length = 0;
+  await acknowledge(r.alert!.id, "Musa");
+  check("responding update goes to Telegram too", sent.some((x) => x.startsWith("TG 555") && x.includes("Musa is responding")));
 }
 console.log(fail ? `\n${fail} FAILED` : "\nALL PASS");
 if (fail) process.exit(1);
