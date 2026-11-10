@@ -29,6 +29,11 @@ async function post(url: string, form: Record<string, string>) {
   return { ok: res.ok, json };
 }
 
+/** A real voice number is set (not empty, not the +234XXXXXXXXXX placeholder from .env.example). */
+export function voiceEnabled() {
+  return /^\+\d{8,15}$/.test((process.env.AT_VOICE_NUMBER ?? "").trim());
+}
+
 export async function sendSms(to: string, message: string): Promise<SendResult> {
   if (env.notifyMode() === "log") {
     console.log(`[SMS → ${to}] ${message}`);
@@ -59,7 +64,7 @@ export async function placeCall(to: string, clientRequestId: string): Promise<Se
     return { ok: true, ref: null, status: "logged", detail: null };
   }
   // SMS-only mode: no voice number bought yet, so skip calls without breaking the SMS.
-  if (!process.env.AT_VOICE_NUMBER) {
+  if (!voiceEnabled()) {
     return { ok: false, ref: null, status: "skipped", detail: "No AT_VOICE_NUMBER set (SMS-only mode)" };
   }
   const { ok, json } = await post("https://voice.africastalking.com/call", {

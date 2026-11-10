@@ -3,6 +3,7 @@ import { db } from "@/lib/supabase";
 import { STATUS_STYLE, ago } from "@/lib/ui";
 import { closeAllAlerts, createDemo, enableVirtualSensor, sendTestSms, testAlarm } from "@/app/actions";
 import { explainDelivery } from "@/lib/notify/explain";
+import { voiceEnabled } from "@/lib/notify/africastalking";
 import AutoRefresh from "@/components/AutoRefresh";
 import DbError from "@/components/DbError";
 
@@ -148,6 +149,11 @@ export default async function Demo({ searchParams }: { searchParams: Promise<{ s
           <li>
             ℹ️ Sender ID: <b>{sender ?? "default (none set)"}</b>
             {sender && <span className="text-zinc-700"> — if texts fail, it may not be approved yet; clear AT_SMS_SENDER</span>}
+          </li>
+          <li>
+            {voiceEnabled() ? "✅ Calls on" : "ℹ️ Calls off"} — {voiceEnabled()
+              ? "each contact gets a call (press 1 to respond) and a text"
+              : "texts only. Alerts show a skipped 📞 Call row; that's expected until you buy an Africa's Talking voice number"}
           </li>
           <li>ℹ️ Use a Nigerian number (+234) unless your Africa&apos;s Talking account can send abroad.</li>
         </ul>
