@@ -28,14 +28,14 @@ export default async function Cert({ params }: { params: Promise<{ code: string 
   return (
     <main className="mx-auto max-w-md p-6">
       <div className={`rounded-xl border-4 p-6 text-center ${valid ? "border-emerald-600" : "border-zinc-400"}`}>
-        <div className="text-sm uppercase tracking-widest text-zinc-500">Firewatch Fire Safety Certificate</div>
-        <div className={`my-3 text-3xl font-bold ${valid ? "text-emerald-700" : "text-zinc-500"}`}>
+        <div className="text-sm uppercase tracking-widest text-zinc-600">Firewatch Fire Safety Certificate</div>
+        <div className={`my-3 text-3xl font-bold ${valid ? "text-emerald-700" : "text-zinc-600"}`}>
           {valid ? "VALID" : "EXPIRED"}
         </div>
         <div className="text-lg font-semibold">Shop {cert.shops?.shop_number}</div>
         <div>{cert.shops?.owner_name}</div>
-        <div className="text-zinc-600">{cert.shops?.markets?.name}</div>
-        <div className="mt-4 text-sm text-zinc-600">
+        <div className="text-zinc-700">{cert.shops?.markets?.name}</div>
+        <div className="mt-4 text-sm text-zinc-700">
           Score {cert.score}% · Audited by {cert.auditor_name} on {new Date(cert.created_at).toLocaleDateString("en-GB")}
           <br />
           Valid until {new Date(cert.valid_until).toLocaleDateString("en-GB")} · Code {cert.certificate_code}

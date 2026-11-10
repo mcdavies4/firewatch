@@ -71,7 +71,7 @@ export default async function Alerts() {
           })}
           {!rows.length && (
             <tr>
-              <td className="p-4 text-zinc-500" colSpan={6}>No alerts yet.</td>
+              <td className="p-4 text-zinc-600" colSpan={6}>No alerts yet.</td>
             </tr>
           )}
         </tbody>

@@ -58,7 +58,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">
-          {market.name} <span className="text-base font-normal text-zinc-500">{market.city}</span>
+          {market.name} <span className="text-base font-normal text-zinc-600">{market.city}</span>
         </h1>
         {markets.length > 1 && (
           <div className="flex gap-2 text-sm">
@@ -112,7 +112,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         ].map(([label, n, bg]) => (
           <div key={label as string} className={`rounded-lg border p-3 ${bg}`}>
             <div className="text-2xl font-bold">{n}</div>
-            <div className="text-sm text-zinc-600">{label}</div>
+            <div className="text-sm text-zinc-700">{label}</div>
           </div>
         ))}
       </div>

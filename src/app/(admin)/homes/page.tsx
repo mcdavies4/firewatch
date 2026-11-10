@@ -39,7 +39,7 @@ export default async function Homes() {
       <AutoRefresh seconds={10} />
       <div>
         <h1 className="text-2xl font-bold">🏠 Firewatch Home</h1>
-        <p className="text-sm text-zinc-600">
+        <p className="text-sm text-zinc-700">
           Smoke and carbon monoxide alarms tied to a home&apos;s postcode. When one goes off, family, neighbours and
           estate security get a call and SMS with the address, landmark and map pin.
         </p>
@@ -55,21 +55,21 @@ export default async function Homes() {
           return (
             <Link key={h.id} href={`/homes/${h.id}`} className={`block rounded-lg p-4 ${style.tile}`}>
               <div className="text-lg font-bold">{h.name}</div>
-              <div className="text-sm opacity-90">
+              <div className="text-sm">
                 {[h.address, h.city].filter(Boolean).join(", ")}
                 {h.nipost_postcode && ` · ${h.nipost_postcode}`}
               </div>
               <div className="mt-2 text-sm font-semibold">
                 {alert ? (alert.hazard === "co" ? "☠️ CARBON MONOXIDE" : "🔥 FIRE ALARM") : style.label}
               </div>
-              <div className="text-xs opacity-80">
+              <div className="text-sm">
                 {sensors.length} device{sensors.length === 1 ? "" : "s"} · last seen {ago(lastSeen)} ·{" "}
                 {h.shops[0]?.owner_name}
               </div>
             </Link>
           );
         })}
-        {!homes.length && <p className="text-zinc-500">No homes yet. Add the first one below.</p>}
+        {!homes.length && <p className="text-zinc-600">No homes yet. Add the first one below.</p>}
       </section>
 
       <form action={createHome} className="max-w-2xl space-y-3 rounded-lg border bg-white p-4">

@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Firewatch",
-  description: "Market fire detection and response",
+  description: "Fire and carbon monoxide alerts for markets and homes",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

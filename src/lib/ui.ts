@@ -5,7 +5,7 @@ export const STATUS_STYLE: Record<string, { label: string; tile: string; dot: st
   low_battery: { label: "Low battery", tile: "bg-amber-300 text-zinc-900", dot: "bg-amber-400" },
   ok: { label: "OK", tile: "bg-emerald-600 text-white", dot: "bg-emerald-600" },
   unassigned: { label: "Unassigned", tile: "bg-zinc-200 text-zinc-700", dot: "bg-zinc-300" },
-  none: { label: "No sensor", tile: "border-2 border-dashed border-zinc-300 text-zinc-500", dot: "bg-zinc-200" },
+  none: { label: "No sensor", tile: "border-2 border-dashed border-zinc-300 text-zinc-600", dot: "bg-zinc-200" },
 };
 
 const RANK = ["alarm", "tamper", "offline", "low_battery", "ok", "unassigned", "none"];

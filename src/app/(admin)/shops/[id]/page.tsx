@@ -26,7 +26,7 @@ export default async function ShopPage({ params }: { params: Promise<{ id: strin
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Shop {shop.shop_number}</h1>
-        <p className="text-zinc-600">
+        <p className="text-zinc-700">
           {shop.owner_name} · {shop.owner_phone} · {shop.trade ?? "—"} · {shop.sections?.name ?? "No section"},{" "}
           {shop.markets?.name}
         </p>
@@ -39,7 +39,7 @@ export default async function ShopPage({ params }: { params: Promise<{ id: strin
 
       <section className="rounded-lg border bg-white p-4">
         <h2 className="mb-2 font-semibold">Sensors</h2>
-        {(shop.sensors ?? []).length === 0 && <p className="text-sm text-zinc-500">No sensor assigned. Use Setup.</p>}
+        {(shop.sensors ?? []).length === 0 && <p className="text-sm text-zinc-600">No sensor assigned. Use Setup.</p>}
         {(shop.sensors ?? []).map((s: { id: string; dev_eui: string; status: string; battery_pct: number | null; last_seen_at: string | null; last_rssi: number | null }) => (
           <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 border-t py-2 text-sm first:border-t-0">
             <div>
@@ -53,7 +53,7 @@ export default async function ShopPage({ params }: { params: Promise<{ id: strin
             </form>
           </div>
         ))}
-        <p className="mt-2 text-xs text-zinc-500">
+        <p className="mt-2 text-xs text-zinc-600">
           “Run fire drill” sends a simulated alarm through the real call/SMS chain. Warn responders first.
         </p>
       </section>

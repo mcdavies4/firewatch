@@ -25,7 +25,7 @@ export default async function SensorPage({
     .maybeSingle();
 
   if (!sensor?.device_key || !safeEqual(k, sensor.device_key)) {
-    return <main className="p-6 text-center text-zinc-600">This sensor link is not valid.</main>;
+    return <main className="p-6 text-center text-zinc-700">This sensor link is not valid.</main>;
   }
 
   const home = (sensor as unknown as { shops: { markets: { name: string } | null } | null }).shops?.markets?.name;

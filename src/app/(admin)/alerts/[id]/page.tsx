@@ -94,7 +94,7 @@ export default async function AlertDetail({ params }: { params: Promise<{ id: st
                 <td className="p-2">{new Date(t.created_at).toLocaleTimeString("en-GB")}</td>
                 <td className="p-2">{t.tier}</td>
                 <td className="p-2">
-                  {t.contact_name} <span className="text-zinc-500">{t.contact_phone}</span>
+                  {t.contact_name} <span className="text-zinc-600">{t.contact_phone}</span>
                 </td>
                 <td className="p-2">{t.role}</td>
                 <td className="p-2">{t.channel}</td>

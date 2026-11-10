@@ -90,7 +90,7 @@ export default async function Setup() {
 
         <form action={createContact} className={`${card} md:col-span-2`}>
           <h2 className="font-semibold">5. Add responder</h2>
-          <p className="text-sm text-zinc-600">
+          <p className="text-sm text-zinc-700">
             Tier 0 is called immediately with the shop owner. Each higher tier is called if nobody has pressed 1 within
             the escalation window. Technicians only get offline-sensor messages.
           </p>
@@ -142,7 +142,7 @@ export default async function Setup() {
 
       <section>
         <h2 className="mb-2 font-semibold">Sensors</h2>
-        <p className="mb-2 text-sm text-zinc-600">Unknown sensors that send data appear here as “Unassigned”.</p>
+        <p className="mb-2 text-sm text-zinc-700">Unknown sensors that send data appear here as “Unassigned”.</p>
         <table className="w-full rounded-lg bg-white text-sm shadow-sm">
           <tbody>
             {(sensors ?? []).map((s) => {

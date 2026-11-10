@@ -72,7 +72,7 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
       <div>
         <Link href="/homes" className="text-sm underline">← All homes</Link>
         <h1 className="mt-1 text-2xl font-bold">🏠 {home.name}</h1>
-        <p className="text-zinc-600">
+        <p className="text-zinc-700">
           {[home.address, home.city, home.state].filter(Boolean).join(", ")}
           {home.nipost_postcode && <> · Postcode <b>{home.nipost_postcode}</b></>}
           {home.landmark && <> · near {home.landmark}</>}
@@ -83,7 +83,7 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
             </>
           )}
         </p>
-        <p className="text-sm text-zinc-600">
+        <p className="text-sm text-zinc-700">
           Resident: {household?.owner_name} · {household?.owner_phone}
           {household?.backup_phone && ` · ${household.backup_phone}`}
         </p>
@@ -113,7 +113,7 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
                   <span className={`mr-2 inline-block h-2 w-2 rounded-full ${st.dot}`} />
                   <b>{s.label ?? "Alarm"}</b> · {KIND_LABEL[s.kind] ?? s.kind} · {st.label}
                 </div>
-                <div className="text-sm text-zinc-600">
+                <div className="text-sm text-zinc-700">
                   seen {ago(s.last_seen_at)} · battery {s.battery_pct ?? "?"}%
                   {s.co_ppm !== null && ` · CO ${s.co_ppm} ppm`}
                   {s.temperature_c !== null && ` · ${s.temperature_c}°C`}
@@ -141,8 +141,8 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
                 )}
               </div>
               {s.device_key && (
-                <details className="text-xs">
-                  <summary className="cursor-pointer text-zinc-600">Firmware settings for this device</summary>
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-zinc-700">Firmware settings for this device</summary>
                   <pre className="mt-2 overflow-x-auto rounded bg-zinc-100 p-2">{`#define FW_SERVER     "${env.appUrl()}/api/device"
 #define FW_DEVICE_ID  "${s.dev_eui}"
 #define FW_DEVICE_KEY "${s.device_key}"`}</pre>
@@ -165,7 +165,7 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
 
       <section className="space-y-3">
         <h2 className="font-semibold">Who gets alerted</h2>
-        <p className="text-sm text-zinc-600">
+        <p className="text-sm text-zinc-700">
           The resident and tier 0 are called and texted straight away. If nobody presses 1 or taps the link within{" "}
           {env.escalationSeconds()}s, the next tier is called. Family abroad can be any tier: they get the SMS and can
           coordinate.
@@ -182,14 +182,14 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
                   <form action={toggleContact}>
                     <input type="hidden" name="id" value={c.id} />
                     <input type="hidden" name="active" value={String(!c.active)} />
-                    <button className="text-xs underline">{c.active ? "Disable" : "Enable"}</button>
+                    <button className="text-sm font-medium underline">{c.active ? "Disable" : "Enable"}</button>
                   </form>
                 </td>
               </tr>
             ))}
             {!contacts?.length && (
               <tr>
-                <td className="p-3 text-zinc-500">Only the resident so far. Add family, a neighbour and estate security.</td>
+                <td className="p-3 text-zinc-600">Only the resident so far. Add family, a neighbour and estate security.</td>
               </tr>
             )}
           </tbody>
@@ -225,7 +225,7 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
                 ` · answered in ${Math.round((new Date(a.acknowledged_at).getTime() - new Date(a.created_at).getTime()) / 1000)}s by ${a.acknowledged_by}`}
             </li>
           ))}
-          {!alerts?.length && <li className="text-zinc-500">No alerts yet. Run a drill above.</li>}
+          {!alerts?.length && <li className="text-zinc-600">No alerts yet. Run a drill above.</li>}
         </ul>
       </section>
     </div>

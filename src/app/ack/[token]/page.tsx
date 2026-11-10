@@ -56,7 +56,7 @@ export default async function Ack({
         <input name="name" placeholder="Your name" className="w-full rounded border p-3 text-lg" />
         <button className="w-full rounded-lg bg-red-600 p-4 text-xl font-bold text-white">I&apos;M RESPONDING</button>
       </form>
-      <p className="mt-4 text-sm text-zinc-600">Pressing this tells everyone else someone is on the way.</p>
+      <p className="mt-4 text-sm text-zinc-700">Pressing this tells everyone else someone is on the way.</p>
     </Shell>
   );
 }

@@ -96,15 +96,15 @@ export default function VirtualSensor({
 
   return (
     <main className="flex min-h-screen flex-col items-center bg-zinc-950 px-5 py-8 text-white">
-      <div className="text-xs uppercase tracking-widest text-zinc-400">Firewatch Home · virtual sensor</div>
+      <div className="text-sm uppercase tracking-widest text-zinc-300">Firewatch Home · virtual sensor</div>
       <h1 className="mt-1 text-center text-xl font-bold">{home}</h1>
-      <div className="text-sm text-zinc-400">{label}</div>
+      <div className="text-sm text-zinc-300">{label}</div>
 
       {/* The "device" */}
       <div className="mt-8 flex h-56 w-56 items-center justify-center rounded-full bg-zinc-100 shadow-[0_0_60px_rgba(255,255,255,0.08)]">
         <div className="flex h-40 w-40 flex-col items-center justify-center rounded-full border-8 border-zinc-200 bg-white">
           <div className={`h-5 w-5 rounded-full ${ring}`} />
-          <div className="mt-3 text-xs font-bold tracking-widest text-zinc-500">FIREWATCH</div>
+          <div className="mt-3 text-xs font-bold tracking-widest text-zinc-600">FIREWATCH</div>
           <div className={`mt-1 text-sm font-bold ${alarming ? "text-red-600" : "text-emerald-600"}`}>
             {mode === "fire" ? "SMOKE" : mode === "co" ? "CO DANGER" : "OK"}
           </div>
@@ -144,7 +144,7 @@ export default function VirtualSensor({
         </div>
       </div>
 
-      <ul className="mt-6 w-full max-w-sm space-y-1 font-mono text-xs text-zinc-400">
+      <ul className="mt-6 w-full max-w-sm space-y-1 font-mono text-sm text-zinc-200">
         {log.map((l, i) => (
           <li key={i}>{l}</li>
         ))}
