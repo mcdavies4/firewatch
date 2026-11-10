@@ -15,6 +15,7 @@ interface AlertRow {
   current_tier: number;
   next_escalation_at: string | null;
   ack_token: string;
+  hazard: "fire" | "co";
 }
 
 export interface AlertContext {
@@ -25,6 +26,13 @@ export interface AlertContext {
   backupPhone: string | null;
   sectionName: string | null;
   marketName: string;
+  kind: "market" | "home";
+  hazard: "fire" | "co";
+  address: string | null;
+  postcode: string | null;
+  landmark: string | null;
+  lat: number | null;
+  lng: number | null;
 }
 
 interface Recipient {
@@ -71,20 +79,22 @@ export async function handleUplink(u: NormalisedUplink) {
       last_seen_at: u.receivedAt,
       battery_pct: u.batteryPct ?? sensor.battery_pct,
       temperature_c: u.temperatureC ?? sensor.temperature_c,
+      co_ppm: u.coPpm ?? sensor.co_ppm,
       last_gateway: u.gatewayId ?? sensor.last_gateway,
       last_rssi: u.rssi ?? sensor.last_rssi,
     })
     .eq("id", sensor.id);
 
-  if (u.type === "alarm" && sensor.shop_id) {
-    return { sensorId: sensor.id, alert: await openAlert(sensor.id, sensor.shop_id) };
+  if ((u.type === "alarm" || u.type === "co_alarm") && sensor.shop_id) {
+    const hazard = u.type === "co_alarm" ? "co" : "fire";
+    return { sensorId: sensor.id, alert: await openAlert(sensor.id, sensor.shop_id, hazard) };
   }
   return { sensorId: sensor.id, alert: null };
 }
 
 function nextSensorStatus(current: string, shopId: string | null, u: NormalisedUplink): string {
   if (!shopId) return "unassigned";
-  if (u.type === "alarm") return "alarm";
+  if (u.type === "alarm" || u.type === "co_alarm") return "alarm";
   if (u.type === "tamper") return "tamper";
   if (current === "alarm") return "alarm"; // stays red until a human resolves the alert
   if (u.batteryPct !== null && u.batteryPct <= env.lowBatteryPct()) return "low_battery";
@@ -92,13 +102,13 @@ function nextSensorStatus(current: string, shopId: string | null, u: NormalisedU
 }
 
 // ---------- Alerts ----------
-async function openAlert(sensorId: string, shopId: string) {
+async function openAlert(sensorId: string, shopId: string, hazard: "fire" | "co") {
   const supa = db();
   const { data: shop } = await supa.from("shops").select("market_id, section_id").eq("id", shopId).single();
 
   const ins = await supa
     .from("alerts")
-    .insert({ sensor_id: sensorId, shop_id: shopId, market_id: shop?.market_id, section_id: shop?.section_id })
+    .insert({ sensor_id: sensorId, shop_id: shopId, market_id: shop?.market_id, section_id: shop?.section_id, hazard })
     .select("*")
     .single();
 
@@ -114,7 +124,9 @@ async function openAlert(sensorId: string, shopId: string) {
 export async function getAlertContext(alertId: string): Promise<AlertContext | null> {
   const { data } = await db()
     .from("alerts")
-    .select("*, shops(shop_number, owner_name, owner_phone, backup_phone), sections(name), markets(name)")
+    .select(
+      "*, shops(shop_number, owner_name, owner_phone, backup_phone), sections(name), markets(name, kind, address, nipost_postcode, landmark, lat, lng)",
+    )
     .eq("id", alertId)
     .maybeSingle();
   if (!data) return null;
@@ -126,6 +138,13 @@ export async function getAlertContext(alertId: string): Promise<AlertContext | n
     backupPhone: data.shops?.backup_phone ?? null,
     sectionName: data.sections?.name ?? null,
     marketName: data.markets?.name ?? "the market",
+    kind: data.markets?.kind === "home" ? "home" : "market",
+    hazard: data.hazard === "co" ? "co" : "fire",
+    address: data.markets?.address ?? null,
+    postcode: data.markets?.nipost_postcode ?? null,
+    landmark: data.markets?.landmark ?? null,
+    lat: data.markets?.lat ?? null,
+    lng: data.markets?.lng ?? null,
   };
 }
 
@@ -164,12 +183,47 @@ async function highestTier(marketId: string | null): Promise<number> {
 }
 
 export function locationText(ctx: AlertContext) {
+  if (ctx.kind === "home") {
+    return [
+      ctx.marketName,
+      ctx.address,
+      ctx.postcode && `postcode ${ctx.postcode}`,
+      ctx.landmark && `near ${ctx.landmark}`,
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
   return [`Shop ${ctx.shopNumber}`, ctx.sectionName, ctx.marketName].filter(Boolean).join(", ");
 }
 
+export function mapUrl(ctx: AlertContext): string | null {
+  return ctx.lat !== null && ctx.lng !== null ? `https://maps.google.com/?q=${ctx.lat},${ctx.lng}` : null;
+}
+
+export function hazardTitle(ctx: AlertContext) {
+  return ctx.hazard === "co" ? "CARBON MONOXIDE ALERT" : "FIRE ALERT";
+}
+
+/** One line of what to do, shown in SMS and on the ack page. */
+export function hazardAdvice(ctx: AlertContext) {
+  return ctx.hazard === "co"
+    ? "Get everyone out, open doors and windows, switch off the generator. Do not go back in."
+    : ctx.kind === "home"
+      ? "Get everyone out and call 112."
+      : "Go now.";
+}
+
 export function voiceScript(ctx: AlertContext) {
+  if (ctx.kind === "home") {
+    const where = [ctx.marketName, ctx.address, ctx.landmark && `near ${ctx.landmark}`].filter(Boolean).join(", ");
+    return ctx.hazard === "co"
+      ? `Danger. Carbon monoxide detected at ${where}. Get everyone out now. Open the doors and windows and switch off the generator. Do not go back inside. Press 1 if you are responding.`
+      : `Fire alert. Fire alert. Smoke or heat detected at ${where}. Get everyone out and call 112. Press 1 if you are responding.`;
+  }
   const shop = ctx.shopNumber.split("").join(" "); // "A12" -> "A 1 2" so it's read clearly
-  return `Fire alert. Fire alert. Smoke or heat detected at shop ${shop}, ${ctx.sectionName ?? ""}, ${ctx.marketName}. Go now. Press 1 if you are responding.`;
+  return ctx.hazard === "co"
+    ? `Danger. Carbon monoxide detected at shop ${shop}, ${ctx.sectionName ?? ""}, ${ctx.marketName}. Switch off the generator and keep people out. Press 1 if you are responding.`
+    : `Fire alert. Fire alert. Smoke or heat detected at shop ${shop}, ${ctx.sectionName ?? ""}, ${ctx.marketName}. Go now. Press 1 if you are responding.`;
 }
 
 /** Calls + texts everyone in a tier, then schedules the next tier. */
@@ -180,9 +234,12 @@ export async function notifyTier(alertId: string, tier: number) {
 
   const recipients = await recipientsForTier(ctx, tier);
   const ackUrl = `${env.appUrl()}/ack/${ctx.alert.ack_token}`;
+  const map = mapUrl(ctx);
   const sms =
-    `FIRE ALERT: smoke/heat at ${locationText(ctx)}. ` +
-    `Go now and tap to confirm you're responding: ${ackUrl}`;
+    `${hazardTitle(ctx)}${ctx.hazard === "fire" ? ": smoke/heat" : ""} at ${locationText(ctx)}. ` +
+    `${hazardAdvice(ctx)} ` +
+    (map ? `Map: ${map} ` : "") +
+    `Tap to confirm you're responding: ${ackUrl}`;
 
   await Promise.all(
     recipients.map(async (r) => {
@@ -269,7 +326,12 @@ export async function acknowledge(alertId: string, by: string) {
   const phones = [...new Set((attempts ?? []).map((a) => a.contact_phone))];
   if (ctx) {
     await Promise.all(
-      phones.map((p) => sendSms(p, `UPDATE: ${by} is responding to the fire alert at ${locationText(ctx)}.`)),
+      phones.map((p) =>
+        sendSms(
+          p,
+          `UPDATE: ${by} is responding to the ${ctx.hazard === "co" ? "carbon monoxide" : "fire"} alert at ${locationText(ctx)}.`,
+        ),
+      ),
     );
   }
   return true;
@@ -300,18 +362,31 @@ export async function runHealthCheck() {
     .update({ status: "offline" })
     .in("status", ["ok", "low_battery"])
     .lt("last_seen_at", cutoff)
-    .select("id, dev_eui, label, shops(shop_number, market_id)");
+    .select("id, dev_eui, label, shops(shop_number, market_id, owner_phone, markets(name, kind))");
 
   const items = (wentOffline ?? []) as unknown as {
     dev_eui: string;
     label: string | null;
-    shops: { shop_number: string; market_id: string } | null;
+    shops: {
+      shop_number: string;
+      market_id: string;
+      owner_phone: string;
+      markets: { name: string; kind: string } | null;
+    } | null;
   }[];
 
   const byMarket = new Map<string, string[]>();
   for (const s of items) {
     const m = s.shops?.market_id;
     if (!m) continue;
+    // Homes have no technician: tell the household directly.
+    if (s.shops?.markets?.kind === "home") {
+      await sendSms(
+        s.shops.owner_phone,
+        `Firewatch: your alarm${s.label ? ` (${s.label})` : ""} at ${s.shops.markets.name} has gone offline. Please check its power and WiFi.`,
+      );
+      continue;
+    }
     const list = byMarket.get(m) ?? [];
     list.push(s.shops?.shop_number ?? s.label ?? s.dev_eui);
     byMarket.set(m, list);

@@ -17,11 +17,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const { market: marketParam } = await searchParams;
   const supa = db();
 
-  const { data: markets } = await supa.from("markets").select("id, name, city").order("name");
+  const { data: markets } = await supa.from("markets").select("id, name, city").eq("kind", "market").order("name");
   if (!markets?.length) {
     return (
       <p>
-        No markets yet. <Link className="underline" href="/setup">Add one in Setup</Link>.
+        No markets yet. <Link className="underline" href="/setup">Add one in Setup</Link>, or go to{" "}
+        <Link className="underline" href="/homes">Homes</Link>.
       </p>
     );
   }

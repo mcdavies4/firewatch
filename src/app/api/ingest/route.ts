@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   if (event && event !== "up") return NextResponse.json({ ignored: event });
 
   const body = await req.json().catch(() => null);
-  const uplink = normalise(body, env.heatAlarmC());
+  const uplink = normalise(body, env.heatAlarmC(), env.coAlarmPpm());
   if (!uplink) return NextResponse.json({ ignored: "not an uplink" });
 
   try {

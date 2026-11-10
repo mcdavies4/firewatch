@@ -1,5 +1,5 @@
 import { db } from "@/lib/supabase";
-import { getAlertContext, locationText } from "@/lib/alerts/engine";
+import { getAlertContext, hazardAdvice, hazardTitle, locationText, mapUrl } from "@/lib/alerts/engine";
 import { ackFromLink } from "@/app/public-actions";
 
 export const dynamic = "force-dynamic";
@@ -24,19 +24,33 @@ export default async function Ack({
   if (done || a.status !== "open") {
     return (
       <Shell>
-        <h1 className="text-2xl font-bold">🔥 {locationText(ctx)}</h1>
+        <h1 className="text-2xl font-bold">
+          {ctx.hazard === "co" ? "☠️" : "🔥"} {locationText(ctx)}
+        </h1>
         <p className="mt-2">
           {a.status === "acknowledged" ? `${a.acknowledged_by} is responding.` : `This alert is ${a.status.replace("_", " ")}.`}
         </p>
-        <p className="mt-4 font-semibold">If it is safe, go and help. If not, call 112 and keep people away.</p>
+        <p className="mt-4 font-semibold">
+          {ctx.hazard === "co"
+            ? "Keep everyone out until the generator is off and the house is aired. Call 112 if anyone feels unwell."
+            : "If it is safe, go and help. If not, call 112 and keep people away."}
+        </p>
       </Shell>
     );
   }
 
   return (
     <Shell>
-      <h1 className="text-2xl font-bold text-red-600">🔥 FIRE ALERT</h1>
+      <h1 className={`text-2xl font-bold ${ctx.hazard === "co" ? "text-purple-700" : "text-red-600"}`}>
+        {ctx.hazard === "co" ? "☠️" : "🔥"} {hazardTitle(ctx)}
+      </h1>
       <p className="mt-1 text-lg">{locationText(ctx)}</p>
+      <p className="mt-2 font-semibold">{hazardAdvice(ctx)}</p>
+      {mapUrl(ctx) && (
+        <a href={mapUrl(ctx)!} target="_blank" className="mt-2 inline-block rounded bg-zinc-900 px-3 py-2 text-white">
+          📍 Open in Maps
+        </a>
+      )}
       <form action={ackFromLink} className="mt-6 space-y-3">
         <input type="hidden" name="token" value={token} />
         <input name="name" placeholder="Your name" className="w-full rounded border p-3 text-lg" />

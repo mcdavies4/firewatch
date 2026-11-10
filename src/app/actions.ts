@@ -126,16 +126,18 @@ export async function closeAlertAction(f: FormData) {
 export async function testAlarm(f: FormData) {
   await requireAdmin();
   const devEui = s(f, "dev_eui")!;
+  const co = s(f, "hazard") === "co";
   const r = await handleUplink({
     devEui,
     source: "ttn",
     receivedAt: new Date().toISOString(),
-    type: "alarm",
+    type: co ? "co_alarm" : "alarm",
     batteryPct: null,
     temperatureC: null,
+    coPpm: co ? 300 : null,
     gatewayId: null,
     rssi: null,
-    decoded: { simulated: true, smoke_alarm: "alarm" },
+    decoded: co ? { simulated: true, co_ppm: 300 } : { simulated: true, smoke_alarm: "alarm" },
     raw: null,
   });
   redirect(r.alert ? `/alerts/${r.alert.id}` : "/alerts");
@@ -164,4 +166,77 @@ export async function submitAudit(f: FormData) {
     }),
   );
   revalidatePath(`/shops/${shopId}`);
+}
+
+// ---------- Firewatch Home ----------
+const num = (v: string | null) => (v !== null && Number.isFinite(Number(v)) ? Number(v) : null);
+
+/** A home is a site (markets.kind = 'home') with one household record. */
+export async function createHome(f: FormData) {
+  await requireAdmin();
+  const supa = db();
+  const { data: home } = await must(
+    supa
+      .from("markets")
+      .insert({
+        kind: "home",
+        name: s(f, "name"),
+        city: s(f, "city"),
+        state: s(f, "state"),
+        address: s(f, "address"),
+        nipost_postcode: s(f, "nipost_postcode"),
+        landmark: s(f, "landmark"),
+        lat: num(s(f, "lat")),
+        lng: num(s(f, "lng")),
+      })
+      .select("id")
+      .single(),
+  );
+  await must(
+    supa.from("shops").insert({
+      market_id: home!.id,
+      shop_number: "HOME",
+      owner_name: s(f, "owner_name"),
+      owner_phone: phone(s(f, "owner_phone")),
+      backup_phone: phone(s(f, "backup_phone")),
+      nipost_postcode: s(f, "nipost_postcode"),
+    }),
+  );
+  revalidatePath("/homes");
+  redirect(`/homes/${home!.id}`);
+}
+
+export async function addHomeContact(f: FormData) {
+  await requireAdmin();
+  const homeId = s(f, "market_id")!;
+  await must(
+    db().from("contacts").insert({
+      market_id: homeId,
+      name: s(f, "name"),
+      phone: phone(s(f, "phone")),
+      role: s(f, "role") ?? "family",
+      tier: Number(s(f, "tier") ?? 0),
+    }),
+  );
+  revalidatePath(`/homes/${homeId}`);
+}
+
+/** Registers an ESP32 unit: generates its ID and secret key to flash into the firmware. */
+export async function addHomeDevice(f: FormData) {
+  await requireAdmin();
+  const homeId = s(f, "market_id")!;
+  const { data: household } = await must(
+    db().from("shops").select("id").eq("market_id", homeId).eq("shop_number", "HOME").single(),
+  );
+  await must(
+    db().from("sensors").insert({
+      dev_eui: randomBytes(8).toString("hex").toUpperCase(),
+      device_key: randomBytes(16).toString("hex"),
+      shop_id: household!.id,
+      kind: s(f, "kind") ?? "smoke_co",
+      label: s(f, "label"),
+      status: "ok",
+    }),
+  );
+  revalidatePath(`/homes/${homeId}`);
 }

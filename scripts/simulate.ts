@@ -5,6 +5,11 @@
  *   npm run simulate -- heartbeat --eui 70B3D57ED0000002 --battery 15
  *   npm run simulate -- alarm --url https://your-app.vercel.app
  *
+ * Firewatch Home devices (ID and key from the home page → "Firmware settings"):
+ *   npm run simulate -- home-fire --eui A1B2C3D4E5F60718 --key abc123...
+ *   npm run simulate -- home-co   --eui A1B2C3D4E5F60718 --key abc123...
+ *   npm run simulate -- home-heartbeat --eui ... --key ...
+ *
  * Reads INGEST_WEBHOOK_SECRET from .env.local.
  */
 import { readFileSync, existsSync } from "fs";
@@ -27,7 +32,7 @@ const url = opt("url", "http://localhost:3000").replace(/\/$/, "");
 const eui = opt("eui", "70B3D57ED0000001").toUpperCase();
 const battery = Number(opt("battery", "87"));
 const secret = process.env.INGEST_WEBHOOK_SECRET;
-if (!secret) {
+if (!secret && !type.startsWith("home-")) {
   console.error("Set INGEST_WEBHOOK_SECRET in .env.local");
   process.exit(1);
 }
@@ -48,7 +53,26 @@ const body = {
   },
 };
 
+async function sendHome() {
+  const event = type.replace("home-", "");
+  const res = await fetch(`${url}/api/device`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Device-Key": opt("key", "") },
+    body: JSON.stringify({
+      device_id: eui,
+      event,
+      smoke_raw: event === "fire" ? 2600 : 700,
+      co_raw: event === "co" ? 2400 : 500,
+      co_ppm: event === "co" ? 300 : 3,
+      battery,
+      rssi: -58,
+    }),
+  });
+  console.log(res.status, await res.text());
+}
+
 async function main() {
+  if (type.startsWith("home-")) return sendHome();
   const res = await fetch(`${url}/api/ingest`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Webhook-Secret": secret! },

@@ -18,6 +18,7 @@ export const env = {
   offlineMinutes: () => Number(process.env.OFFLINE_MINUTES ?? 180),
   lowBatteryPct: () => Number(process.env.LOW_BATTERY_PCT ?? 20),
   heatAlarmC: () => Number(process.env.HEAT_ALARM_C ?? 57),
+  coAlarmPpm: () => Number(process.env.CO_ALARM_PPM ?? 100),
   at: {
     username: () => required("AT_USERNAME"),
     apiKey: () => required("AT_API_KEY"),

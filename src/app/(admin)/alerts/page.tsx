@@ -15,7 +15,7 @@ const BADGE: Record<string, string> = {
 export default async function Alerts() {
   const { data } = await db()
     .from("alerts")
-    .select("id, status, created_at, acknowledged_by, acknowledged_at, shops(shop_number, owner_name), markets(name)")
+    .select("id, status, created_at, acknowledged_by, acknowledged_at, hazard, shops(shop_number, owner_name), markets(name, kind)")
     .order("created_at", { ascending: false })
     .limit(100);
 
@@ -25,8 +25,9 @@ export default async function Alerts() {
     created_at: string;
     acknowledged_by: string | null;
     acknowledged_at: string | null;
+    hazard: string;
     shops: { shop_number: string; owner_name: string } | null;
-    markets: { name: string } | null;
+    markets: { name: string; kind: string } | null;
   }[];
 
   return (
@@ -37,8 +38,9 @@ export default async function Alerts() {
         <thead className="bg-zinc-100 text-left">
           <tr>
             <th className="p-2">Status</th>
-            <th className="p-2">Shop</th>
-            <th className="p-2">Market</th>
+            <th className="p-2">Hazard</th>
+            <th className="p-2">Where</th>
+            <th className="p-2">Site</th>
             <th className="p-2">Started</th>
             <th className="p-2">Response time</th>
           </tr>
@@ -55,9 +57,10 @@ export default async function Alerts() {
                     <span className={`rounded px-2 py-0.5 text-xs ${BADGE[a.status]}`}>{a.status.replace("_", " ")}</span>
                   </Link>
                 </td>
+                <td className="p-2">{a.hazard === "co" ? "☠️ CO" : "🔥 Fire"}</td>
                 <td className="p-2">
                   <Link className="underline" href={`/alerts/${a.id}`}>
-                    {a.shops?.shop_number} — {a.shops?.owner_name}
+                    {a.markets?.kind === "home" ? "🏠 Home" : `Shop ${a.shops?.shop_number}`} — {a.shops?.owner_name}
                   </Link>
                 </td>
                 <td className="p-2">{a.markets?.name}</td>
@@ -68,7 +71,7 @@ export default async function Alerts() {
           })}
           {!rows.length && (
             <tr>
-              <td className="p-4 text-zinc-500" colSpan={5}>No alerts yet.</td>
+              <td className="p-4 text-zinc-500" colSpan={6}>No alerts yet.</td>
             </tr>
           )}
         </tbody>

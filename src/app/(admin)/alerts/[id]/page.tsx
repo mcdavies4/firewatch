@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/supabase";
-import { getAlertContext, locationText } from "@/lib/alerts/engine";
+import { getAlertContext, locationText, mapUrl } from "@/lib/alerts/engine";
 import { ackFromDashboard, closeAlertAction } from "@/app/actions";
 import AutoRefresh from "@/components/AutoRefresh";
 
@@ -30,9 +30,14 @@ export default async function AlertDetail({ params }: { params: Promise<{ id: st
     <div className="space-y-6">
       <AutoRefresh seconds={5} />
       <div className={`rounded-lg p-4 text-white ${a.status === "open" ? "bg-red-600" : active ? "bg-orange-500" : "bg-zinc-600"}`}>
-        <div className="text-xl font-bold">🔥 {locationText(ctx)}</div>
+        <div className="text-xl font-bold">
+          {ctx.hazard === "co" ? "☠️ Carbon monoxide" : "🔥 Fire"} · {locationText(ctx)}
+        </div>
+        {mapUrl(ctx) && (
+          <a href={mapUrl(ctx)!} target="_blank" className="underline">Open map pin</a>
+        )}
         <div>
-          Owner: {ctx.ownerName} ({ctx.ownerPhone}) · Status: {a.status.replace("_", " ")} · Started{" "}
+          {ctx.kind === "home" ? "Resident" : "Owner"}: {ctx.ownerName} ({ctx.ownerPhone}) · Status: {a.status.replace("_", " ")} · Started{" "}
           {new Date(a.created_at).toLocaleString("en-GB")}
         </div>
         {a.acknowledged_by && (
@@ -60,7 +65,7 @@ export default async function AlertDetail({ params }: { params: Promise<{ id: st
             <input name="note" placeholder="What happened?" className="w-full rounded border p-2" />
             <div className="flex gap-2">
               <button name="outcome" value="resolved" className="rounded bg-emerald-600 px-4 py-2 font-semibold text-white">
-                Fire handled
+                {ctx.hazard === "co" ? "Handled" : "Fire handled"}
               </button>
               <button name="outcome" value="false_alarm" className="rounded bg-zinc-500 px-4 py-2 font-semibold text-white">
                 False alarm

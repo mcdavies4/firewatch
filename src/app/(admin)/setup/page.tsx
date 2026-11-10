@@ -12,7 +12,7 @@ export default async function Setup() {
   const supa = db();
   const [{ data: markets }, { data: sections }, { data: shops }, { data: contacts }, { data: sensors }] =
     await Promise.all([
-      supa.from("markets").select("id, name").order("name"),
+      supa.from("markets").select("id, name").eq("kind", "market").order("name"),
       supa.from("sections").select("id, name, market_id").order("name"),
       supa.from("shops").select("id, shop_number, owner_name, market_id").order("shop_number"),
       supa.from("contacts").select("*").order("tier"),
@@ -20,6 +20,7 @@ export default async function Setup() {
     ]);
 
   const marketName = (id: string) => markets?.find((m) => m.id === id)?.name ?? "";
+  const isMarket = (id: string) => !!markets?.some((m) => m.id === id);
   const MarketSelect = () => (
     <select name="market_id" required className={input}>
       {(markets ?? []).map((m) => (
@@ -74,7 +75,7 @@ export default async function Setup() {
           <input name="dev_eui" required placeholder="DevEUI (16 hex chars, on the sensor label)" className={`${input} font-mono`} />
           <select name="shop_id" className={input}>
             <option value="">— Not installed yet —</option>
-            {(shops ?? []).map((s) => (
+            {(shops ?? []).filter((s) => isMarket(s.market_id)).map((s) => (
               <option key={s.id} value={s.id}>{marketName(s.market_id)} — {s.shop_number} ({s.owner_name})</option>
             ))}
           </select>
@@ -119,7 +120,7 @@ export default async function Setup() {
         <h2 className="mb-2 font-semibold">Responders</h2>
         <table className="w-full rounded-lg bg-white text-sm shadow-sm">
           <tbody>
-            {(contacts ?? []).map((c) => (
+            {(contacts ?? []).filter((c) => isMarket(c.market_id)).map((c) => (
               <tr key={c.id} className={`border-t ${c.active ? "" : "opacity-40"}`}>
                 <td className="p-2">Tier {c.tier}</td>
                 <td className="p-2">{c.name}</td>
