@@ -11,7 +11,7 @@ type Shop = {
   shop_number: string;
   owner_name: string;
   section_id: string | null;
-  sensors: { status: string; last_seen_at: string | null; battery_pct: number | null }[];
+  sensors: { status: string; last_seen_at: string | null; battery_pct: number | null; kind?: string }[];
 };
 
 export default async function Dashboard({ searchParams }: { searchParams: Promise<{ market?: string }> }) {
@@ -20,7 +20,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
   const { data: markets, error } = await supa
     .from("markets")
-    .select("id, name, city")
+    .select("id, name, city, join_token")
     .eq("kind", "market")
     .order("name");
   if (error) return <DbError message={error.message} />;
@@ -41,7 +41,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     supa.from("sections").select("id, name").eq("market_id", market.id).order("name"),
     supa
       .from("shops")
-      .select("id, shop_number, owner_name, section_id, sensors(status, last_seen_at, battery_pct)")
+      .select("id, shop_number, owner_name, section_id, sensors(status, last_seen_at, battery_pct, kind)")
       .eq("market_id", market.id)
       .order("shop_number"),
     supa
@@ -54,7 +54,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
   if (shopsError) return <DbError message={shopsError.message} />;
   const allShops = (shops ?? []) as unknown as Shop[];
-  const allSensors = allShops.flatMap((s) => s.sensors);
+  const allSensors = allShops.flatMap((s) => s.sensors).filter((x) => x.kind !== "panic");
   const count = (st: string) => allSensors.filter((x) => x.status === st).length;
 
   const groups = [
@@ -67,9 +67,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <AutoRefresh seconds={10} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">
-          {market.name} <span className="text-base font-normal text-zinc-600">{market.city}</span>
-        </h1>
+        <div>
+          <h1 className="text-2xl font-bold">
+            {market.name} <span className="text-base font-normal text-zinc-700">{market.city}</span>
+          </h1>
+          {market.join_token && (
+            <a href={`/join/${market.join_token}/poster`} target="_blank" className="text-sm font-semibold underline">
+              🖨 Trader sign-up QR poster
+            </a>
+          )}
+        </div>
         {markets.length > 1 && (
           <div className="flex gap-2 text-sm">
             {markets.map((m) => (

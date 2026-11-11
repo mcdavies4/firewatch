@@ -82,6 +82,19 @@ SMS to Nigerian lines with Do-Not-Disturb is rejected unless you have a transact
 
 Links are per phone number, so one connection covers every role that number has (owner, security, family…).
 
+## 🚀 Growth features (run `supabase/migrations/005_growth.sql`)
+
+| Feature | Where | What it does |
+|---|---|---|
+| **Impact page** | `/impact` (public) | Anonymous totals for officials and partners: coverage, real alerts, median time to a responder, drills, panic reports, by state and LGA (from NIPOST postcodes). Drills are counted separately. |
+| **Fire stations** | `/stations` | Add stations by state + LGA. At tier `FIRE_STATION_TIER` (default 2) the station for the building's NIPOST LGA is called and texted automatically; if none is listed for that LGA, the state-wide ones are used. |
+| **Panic button** | `/panic/<token>` (public, per shop/home) | Two taps raise a real alert ("FIRE REPORTED") with the postcode, no sensor needed. The link is on every shop and home page. |
+| **Trader sign-up** | `/join/<token>` + `/join/<token>/poster` | Each market has a sign-up link and a printable QR poster. Traders register their own shop and get their panic button and Telegram link. |
+| **Languages** | Language picker on every person | Alerts, updates and reminders in English, Pidgin, Hausa, Yoruba or Igbo. Wording lives in `src/lib/i18n.ts`; the non-English versions are drafts to check with native speakers. |
+| **Certificate + insurer report** | `/cert/<code>/pdf` | 2-page PDF: certificate with a verification QR code, then a fire-risk report (audit checklist, detectors, responders, last 12 months of alerts and drills). |
+
+Drills (Demo page buttons, virtual sensor) are labelled **DRILL** in messages and kept out of real-incident figures.
+
 ## Escalation
 
 - **Tier 0** (immediately): shop owner (+ backup number) and tier-0 responders, e.g. night security.

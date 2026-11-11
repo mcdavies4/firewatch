@@ -4,6 +4,7 @@ import { db } from "@/lib/supabase";
 import { AUDIT_ITEMS, PASS_MARK, STATUS_STYLE, ago } from "@/lib/ui";
 import { recheckShopPostcode, submitAudit, testAlarm } from "@/app/actions";
 import PostcodeBadge from "@/components/PostcodeBadge";
+import PanicLink from "@/components/PanicLink";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +54,18 @@ export default async function ShopPage({ params }: { params: Promise<{ id: strin
             ✓ Certified {latestCert.certificate_code} — valid to {latestCert.valid_until}
           </Link>
         )}
+        {latestCert && (
+          <a
+            href={`/cert/${latestCert.certificate_code}/pdf`}
+            target="_blank"
+            className="ml-2 mt-2 inline-block rounded border-2 border-emerald-700 px-3 py-0.5 text-sm font-semibold text-emerald-800"
+          >
+            ⬇ Certificate + insurer report PDF
+          </a>
+        )}
       </div>
+
+      <PanicLink token={shop.panic_token ?? null} />
 
       <section className="rounded-lg border bg-white p-4">
         <h2 className="mb-2 font-semibold">Sensors</h2>

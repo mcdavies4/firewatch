@@ -148,6 +148,54 @@ for (const [m, voice] of [["ok", ""], ["ok", "+2347000000000"], ["sms-throws", "
   check("termii used first on dnd channel", sent.filter((x) => x.startsWith("TERMII ") && x.includes("[dnd]")).length === 2 && !sent.some((x) => x.startsWith("SMS ")));
   delete process.env.SMS_PROVIDERS;
 }
+// Languages, drills, panic reports, fire stations
+{
+  delete process.env.TELEGRAM_BOT_TOKEN; delete process.env.SMS_PROVIDERS; mode = "ok";
+  const { notifyTier, acknowledge } = await import("../src/lib/alerts/engine");
+  console.log("\nLanguages");
+  seed(); sent.length = 0;
+  tables.shops[0].owner_language = "ha";
+  tables.contacts[0].language = "pcm";
+  const r = await drill();
+  check("owner gets Hausa", sent.some((x) => x.startsWith("SMS +2348030000000") && x.includes("GARGADIN WUTA") && x.includes("Ku je yanzu")));
+  check("security gets Pidgin", sent.some((x) => x.startsWith("SMS +2348031111111") && x.includes("Go there now now")));
+  sent.length = 0;
+  await acknowledge(r.alert!.id, "Musa");
+  check("responding update in each person's language", sent.some((x) => x.startsWith("SMS +2348031111111") && x.includes("Musa dey go the fire alert")) && sent.some((x) => x.startsWith("SMS +2348030000000") && x.includes("SANARWA: Musa yana zuwa")));
+
+  console.log("\nDrills and panic");
+  seed(); sent.length = 0;
+  const { handleUplink } = await import("../src/lib/alerts/engine");
+  const d = await handleUplink({ devEui: "AAAA", source: "ttn", receivedAt: new Date().toISOString(), type: "alarm", batteryPct: null, temperatureC: null, coPpm: null, gatewayId: null, rssi: null, decoded: { simulated: true }, raw: null });
+  check("drill flagged and labelled", tables.alerts.find((a) => a.id === d.alert!.id)?.is_drill === true && sent.some((x) => x.includes("DRILL - FIRE ALERT")));
+  seed(); sent.length = 0;
+  tables.sensors.push({ id: "p1", dev_eui: "PANIC1", shop_id: "sh1", status: "ok", kind: "panic" });
+  await handleUplink({ devEui: "PANIC1", source: "ttn", receivedAt: new Date().toISOString(), type: "alarm", batteryPct: null, temperatureC: null, coPpm: null, gatewayId: null, rssi: null, decoded: { panic: true }, raw: null });
+  check("panic report says FIRE REPORTED, not smoke/heat", sent.some((x) => x.includes("FIRE REPORTED at Shop A1")) && !sent.some((x) => x.includes("smoke/heat")));
+  check("panic alert source recorded", tables.alerts.some((a) => a.source === "panic" && a.is_drill === false));
+
+  console.log("\nFire stations by LGA");
+  seed(); sent.length = 0;
+  tables.shops[0].postcode_state = "Anambra"; tables.shops[0].postcode_lga = "Onitsha North";
+  tables.fire_stations = [
+    { id: "f1", name: "Onitsha Fire Station", phone: "+2348099999991", state: "Anambra State", lga: "Onitsha North LGA", active: true },
+    { id: "f2", name: "Awka Fire Station", phone: "+2348099999992", state: "Anambra", lga: "Awka South", active: true },
+    { id: "f3", name: "Anambra State HQ", phone: "+2348099999993", state: "Anambra", lga: null, active: true },
+  ];
+  const a2 = await drill();
+  const al = tables.alerts.find((x) => x.id === a2.alert!.id)!;
+  check("escalation scheduled even with only tier-0 contacts", !!al.next_escalation_at);
+  sent.length = 0;
+  await notifyTier(al.id, 2);
+  check("tier 2 calls the LGA's station only", sent.some((x) => x.startsWith("SMS +2348099999991")) && !sent.some((x) => x.includes("+2348099999992") || x.includes("+2348099999993")));
+  seed(); sent.length = 0;
+  tables.shops[0].postcode_state = "Anambra"; tables.shops[0].postcode_lga = "Ihiala";
+  tables.fire_stations = [{ id: "f3", name: "Anambra State HQ", phone: "+2348099999993", state: "Anambra", lga: null, active: true }];
+  const a3 = await drill();
+  sent.length = 0;
+  await notifyTier(a3.alert!.id, 2);
+  check("no LGA station -> state-wide station", sent.some((x) => x.startsWith("SMS +2348099999993")));
+}
 console.log(fail ? `\n${fail} FAILED` : "\nALL PASS");
 if (fail) process.exit(1);
 }

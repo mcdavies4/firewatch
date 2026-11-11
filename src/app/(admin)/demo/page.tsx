@@ -50,6 +50,7 @@ export default async function Demo({
       .from("sensors")
       .select("id, dev_eui, device_key, label, kind, status, last_seen_at, shops(id, shop_number, markets(id, name, kind))")
       .not("shop_id", "is", null)
+      .neq("kind", "panic")
       .order("created_at"),
     supa.from("alerts").select("id, status, created_at").in("status", ["open", "acknowledged"]),
     supa

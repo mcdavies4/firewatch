@@ -5,6 +5,7 @@ import { placeCall, voiceEnabled, type SendResult } from "../notify/africastalki
 import { sendSms } from "../notify/sms";
 import { sendTelegram, telegramEnabled } from "../notify/telegram";
 import type { NormalisedUplink } from "../ingest/normalise";
+import { asLang, WORDS, type Lang } from "../i18n";
 
 // ---------- Types ----------
 interface AlertRow {
@@ -18,6 +19,8 @@ interface AlertRow {
   next_escalation_at: string | null;
   ack_token: string;
   hazard: "fire" | "co";
+  source?: string;
+  is_drill?: boolean;
 }
 
 export interface AlertContext {
@@ -37,12 +40,19 @@ export interface AlertContext {
   landmark: string | null;
   lat: number | null;
   lng: number | null;
+  source: "sensor" | "panic";
+  isDrill: boolean;
+  ownerLanguage: Lang;
+  /** For matching the nearest fire station. */
+  state: string | null;
+  lga: string | null;
 }
 
 interface Recipient {
   name: string;
   phone: string;
   role: string;
+  lang: Lang;
 }
 
 // ---------- Ingest ----------
@@ -91,7 +101,10 @@ export async function handleUplink(u: NormalisedUplink) {
 
   if ((u.type === "alarm" || u.type === "co_alarm") && sensor.shop_id) {
     const hazard = u.type === "co_alarm" ? "co" : "fire";
-    return { sensorId: sensor.id, alert: await openAlert(sensor.id, sensor.shop_id, hazard) };
+    const d = (u.decoded ?? {}) as { simulated?: unknown; virtual?: unknown; drill?: unknown };
+    const isDrill = !!(d.simulated || d.virtual || d.drill);
+    const source = sensor.kind === "panic" ? "panic" : "sensor";
+    return { sensorId: sensor.id, alert: await openAlert(sensor.id, sensor.shop_id, hazard, { source, isDrill }) };
   }
   return { sensorId: sensor.id, alert: null };
 }
@@ -106,13 +119,26 @@ function nextSensorStatus(current: string, shopId: string | null, u: NormalisedU
 }
 
 // ---------- Alerts ----------
-async function openAlert(sensorId: string, shopId: string, hazard: "fire" | "co") {
+async function openAlert(
+  sensorId: string,
+  shopId: string,
+  hazard: "fire" | "co",
+  opts: { source: string; isDrill: boolean } = { source: "sensor", isDrill: false },
+) {
   const supa = db();
   const { data: shop } = await supa.from("shops").select("market_id, section_id").eq("id", shopId).single();
 
   const ins = await supa
     .from("alerts")
-    .insert({ sensor_id: sensorId, shop_id: shopId, market_id: shop?.market_id, section_id: shop?.section_id, hazard })
+    .insert({
+      sensor_id: sensorId,
+      shop_id: shopId,
+      market_id: shop?.market_id,
+      section_id: shop?.section_id,
+      hazard,
+      source: opts.source,
+      is_drill: opts.isDrill,
+    })
     .select("*")
     .single();
 
@@ -129,7 +155,7 @@ export async function getAlertContext(alertId: string): Promise<AlertContext | n
   const { data } = await db()
     .from("alerts")
     .select(
-      "*, shops(shop_number, owner_name, owner_phone, backup_phone, nipost_postcode, postcode_status, postcode_lga, postcode_state), sections(name), markets(name, kind, address, nipost_postcode, postcode_status, postcode_lga, postcode_state, landmark, lat, lng)",
+      "*, shops(shop_number, owner_name, owner_phone, backup_phone, owner_language, nipost_postcode, postcode_status, postcode_lga, postcode_state), sections(name), markets(name, kind, state, address, nipost_postcode, postcode_status, postcode_lga, postcode_state, landmark, lat, lng)",
     )
     .eq("id", alertId)
     .maybeSingle();
@@ -152,23 +178,32 @@ export async function getAlertContext(alertId: string): Promise<AlertContext | n
         postcode: src?.nipost_postcode ?? null,
         postcodeStatus: src?.postcode_status ?? null,
         postcodeArea: [src?.postcode_lga && `${src.postcode_lga} LGA`, src?.postcode_state].filter(Boolean).join(", ") || null,
+        state: src?.postcode_state ?? data.markets?.state ?? null,
+        lga: src?.postcode_lga ?? null,
       };
     })(),
     landmark: data.markets?.landmark ?? null,
     lat: data.markets?.lat ?? null,
     lng: data.markets?.lng ?? null,
+    source: data.source === "panic" ? "panic" : "sensor",
+    isDrill: !!data.is_drill,
+    ownerLanguage: asLang(data.shops?.owner_language),
   };
 }
 
 async function recipientsForTier(ctx: AlertContext, tier: number): Promise<Recipient[]> {
   const out: Recipient[] = [];
   if (tier === 0) {
-    if (ctx.ownerPhone) out.push({ name: ctx.ownerName, phone: ctx.ownerPhone, role: "owner" });
-    if (ctx.backupPhone) out.push({ name: `${ctx.ownerName} (backup)`, phone: ctx.backupPhone, role: "owner" });
+    const lang = ctx.ownerLanguage;
+    if (ctx.ownerPhone) out.push({ name: ctx.ownerName, phone: ctx.ownerPhone, role: "owner", lang });
+    if (ctx.backupPhone) out.push({ name: `${ctx.ownerName} (backup)`, phone: ctx.backupPhone, role: "owner", lang });
+  }
+  if (tier === stationTier()) {
+    for (const st of await stationsFor(ctx)) out.push({ name: st.name, phone: st.phone, role: "fire_service", lang: "en" });
   }
   let q = db()
     .from("contacts")
-    .select("name, phone, role, section_id")
+    .select("name, phone, role, section_id, language")
     .eq("market_id", ctx.alert.market_id)
     .eq("tier", tier)
     .eq("active", true)
@@ -177,12 +212,32 @@ async function recipientsForTier(ctx: AlertContext, tier: number): Promise<Recip
     ? q.or(`section_id.is.null,section_id.eq.${ctx.alert.section_id}`)
     : q.is("section_id", null);
   const { data } = await q;
-  for (const c of data ?? []) out.push({ name: c.name, phone: c.phone, role: c.role });
+  for (const c of data ?? []) out.push({ name: c.name, phone: c.phone, role: c.role, lang: asLang(c.language) });
   return out;
 }
 
-async function highestTier(marketId: string | null): Promise<number> {
+/** Tier at which the nearest fire station is called (after owner/security and marshals have had a chance). */
+const stationTier = () => Number(process.env.FIRE_STATION_TIER ?? 2);
+
+const norm = (v: string | null | undefined) =>
+  (v ?? "").toLowerCase().replace(/\b(state|lga|local government area|fct)\b/g, "").replace(/[^a-z]/g, "");
+
+/** Fire stations for the alert's LGA; if none are listed for that LGA, the state-wide ones. */
+export async function stationsFor(ctx: Pick<AlertContext, "state" | "lga">) {
+  if (!ctx.state && !ctx.lga) return [];
+  const { data } = await db().from("fire_stations").select("name, phone, state, lga").eq("active", true);
+  const all = (data ?? []) as { name: string; phone: string; state: string; lga: string | null }[];
+  const inState = all.filter((s) => norm(s.state) === norm(ctx.state));
+  const inLga = ctx.lga ? inState.filter((s) => s.lga && norm(s.lga) === norm(ctx.lga)) : [];
+  return inLga.length ? inLga : inState.filter((s) => !s.lga);
+}
+
+async function highestTier(marketId: string | null, ctx?: AlertContext): Promise<number> {
   if (!marketId) return 0;
+  if (ctx && (await stationsFor(ctx)).length) {
+    const contactsMax = await highestTier(marketId);
+    return Math.max(contactsMax, stationTier());
+  }
   const { data } = await db()
     .from("contacts")
     .select("tier")
@@ -214,17 +269,40 @@ export function mapUrl(ctx: AlertContext): string | null {
   return ctx.lat !== null && ctx.lng !== null ? `https://maps.google.com/?q=${ctx.lat},${ctx.lng}` : null;
 }
 
-export function hazardTitle(ctx: AlertContext) {
-  return ctx.hazard === "co" ? "CARBON MONOXIDE ALERT" : "FIRE ALERT";
+export function hazardTitle(ctx: AlertContext, lang: Lang = "en") {
+  const w = WORDS[lang];
+  const title = ctx.hazard === "co" ? w.co : ctx.source === "panic" ? w.panic : w.fire;
+  return ctx.isDrill ? `${w.drill} - ${title}` : title;
 }
 
 /** One line of what to do, shown in SMS and on the ack page. */
-export function hazardAdvice(ctx: AlertContext) {
-  return ctx.hazard === "co"
-    ? "Get everyone out, open doors and windows, switch off the generator. Do not go back in."
-    : ctx.kind === "home"
-      ? "Get everyone out and call 112."
-      : "Go now.";
+export function hazardAdvice(ctx: AlertContext, lang: Lang = "en") {
+  const w = WORDS[lang];
+  return ctx.hazard === "co" ? w.adviceCo : ctx.kind === "home" ? w.adviceFireHome : w.adviceFireMarket;
+}
+
+/** The alert SMS in one person's language. */
+export function smsText(ctx: AlertContext, lang: Lang, ackUrl: string, map: string | null) {
+  const w = WORDS[lang];
+  const sensorFire = ctx.hazard === "fire" && ctx.source !== "panic";
+  return (
+    `${hazardTitle(ctx, lang)}${sensorFire ? `: ${w.smokeHeat}` : ""} ${w.at} ${locationText(ctx)}. ` +
+    `${hazardAdvice(ctx, lang)} ` +
+    (map ? `Map: ${map} ` : "") +
+    `${w.confirm} ${ackUrl}`
+  );
+}
+
+function telegramText(ctx: AlertContext, lang: Lang, map: string | null) {
+  const w = WORDS[lang];
+  const sensorFire = ctx.hazard === "fire" && ctx.source !== "panic";
+  return (
+    `${ctx.hazard === "co" ? "☠️" : "🔥"} ${hazardTitle(ctx, lang)}${sensorFire ? ` — ${w.smokeHeat}` : ""}\n\n` +
+    `📍 ${locationText(ctx)}\n` +
+    (ctx.postcode ? `📮 NIPOST ${ctx.postcode}${ctx.postcodeStatus === "verified" ? " ✓" : ""}\n` : "") +
+    (map ? `🗺 ${map}\n` : "") +
+    `\n${hazardAdvice(ctx, lang)}`
+  );
 }
 
 export function voiceScript(ctx: AlertContext) {
@@ -252,19 +330,14 @@ export async function notifyTier(alertId: string, tier: number) {
   );
   const ackUrl = `${env.appUrl()}/ack/${ctx.alert.ack_token}`;
   const map = mapUrl(ctx);
-  const sms =
-    `${hazardTitle(ctx)}${ctx.hazard === "fire" ? ": smoke/heat" : ""} at ${locationText(ctx)}. ` +
-    `${hazardAdvice(ctx)} ` +
-    (map ? `Map: ${map} ` : "") +
-    `Tap to confirm you're responding: ${ackUrl}`;
 
   // Texts go first and never wait on (or fail because of) the call. Telegram runs alongside.
   await Promise.allSettled([
-    ...recipients.map((r) => contactOne(alertId, tier, r, sms)),
+    ...recipients.map((r) => contactOne(alertId, tier, r, smsText(ctx, r.lang, ackUrl, map))),
     telegramTier(alertId, tier, recipients, ctx, ackUrl, map),
   ]);
 
-  const maxTier = await highestTier(ctx.alert.market_id);
+  const maxTier = await highestTier(ctx.alert.market_id, ctx);
   const next = tier < maxTier ? new Date(Date.now() + env.escalationSeconds() * 1000).toISOString() : null;
   await supa.from("alerts").update({ current_tier: tier, next_escalation_at: next }).eq("id", alertId);
 }
@@ -288,16 +361,10 @@ async function telegramTier(
     list.push(...recipients.filter((r) => r.phone === l.phone));
     byChat.set(l.chat_id, list);
   }
-  const icon = ctx.hazard === "co" ? "☠️" : "🔥";
-  const text =
-    `${icon} ${hazardTitle(ctx)}${ctx.hazard === "fire" ? " — smoke/heat" : ""}\n\n` +
-    `📍 ${locationText(ctx)}\n` +
-    (ctx.postcode ? `📮 NIPOST ${ctx.postcode}${ctx.postcodeStatus === "verified" ? " ✓ verified" : ""}\n` : "") +
-    (map ? `🗺 ${map}\n` : "") +
-    `\n${hazardAdvice(ctx)}`;
   await Promise.allSettled(
     [...byChat.entries()].map(async ([chatId, rs]) => {
-      const res = await sendTelegram(chatId, text, { text: "🚨 I'M RESPONDING", url: ackUrl });
+      const lang = rs[0].lang;
+      const res = await sendTelegram(chatId, telegramText(ctx, lang, map), { text: `🚨 ${WORDS[lang].button}`, url: ackUrl });
       console.log(`[firewatch-telegram] alert=${alertId} chat=${chatId} status=${res.status}`);
       await supa.from("alert_attempts").insert({
         alert_id: alertId,
@@ -308,7 +375,7 @@ async function telegramTier(
         channel: "telegram",
         provider_ref: res.ref,
         status: res.status,
-        detail: res.detail as object,
+        detail: { ...(res.detail as object), lang },
       });
     }),
   );
@@ -332,7 +399,7 @@ async function contactOne(alertId: string, tier: number, r: Recipient, sms: stri
   const text = async () => {
     const { data: row } = await supa
       .from("alert_attempts")
-      .insert({ ...base, channel: "sms", status: "queued" })
+      .insert({ ...base, channel: "sms", status: "queued", detail: { lang: r.lang } })
       .select("id")
       .single();
     const res = await sendSms(r.phone, sms).catch(failed);
@@ -342,7 +409,7 @@ async function contactOne(alertId: string, tier: number, r: Recipient, sms: stri
     if (row) {
       await supa
         .from("alert_attempts")
-        .update({ provider_ref: res.ref, status: res.status, detail: res.detail as object })
+        .update({ provider_ref: res.ref, status: res.status, detail: { ...((res.detail as object) ?? {}), lang: r.lang } })
         .eq("id", row.id);
     }
   };
@@ -388,7 +455,12 @@ export async function telegramReminders() {
       .eq("channel", "telegram");
     if (!rows?.length) continue;
     const originals = rows.filter((r) => r.role !== "reminder" && r.status === "sent");
-    const chats = [...new Set(originals.map((r) => (r.detail as { chat_id?: number } | null)?.chat_id).filter(Boolean))] as number[];
+    const chatLang = new Map<number, Lang>();
+    for (const r of originals) {
+      const d = r.detail as { chat_id?: number; lang?: string } | null;
+      if (d?.chat_id && !chatLang.has(d.chat_id)) chatLang.set(d.chat_id, asLang(d.lang));
+    }
+    const chats = [...chatLang.keys()];
     if (!chats.length) continue;
     const round = new Set(rows.filter((r) => r.role === "reminder").map((r) => r.contact_name)).size;
     const last = Math.max(...rows.map((r) => new Date(r.created_at).getTime()));
@@ -398,15 +470,12 @@ export async function telegramReminders() {
     if (!ctx || ctx.alert.status !== "open") continue;
     const n = round + 1;
     const map = mapUrl(ctx);
-    const text =
-      `⏰ STILL NO ONE RESPONDING (${n}/${MAX_REMINDERS()})\n\n` +
-      `${ctx.hazard === "co" ? "☠️" : "🔥"} ${hazardTitle(ctx)}\n📍 ${locationText(ctx)}\n` +
-      (map ? `🗺 ${map}\n` : "") +
-      `\n${hazardAdvice(ctx)}`;
     const ackUrl = `${env.appUrl()}/ack/${ctx.alert.ack_token}`;
     await Promise.allSettled(
       chats.map(async (chatId) => {
-        const res = await sendTelegram(chatId, text, { text: "🚨 I'M RESPONDING", url: ackUrl });
+        const lang = chatLang.get(chatId) ?? "en";
+        const text = `⏰ ${WORDS[lang].reminder} (${n}/${MAX_REMINDERS()})\n\n${telegramText(ctx, lang, map)}`;
+        const res = await sendTelegram(chatId, text, { text: `🚨 ${WORDS[lang].button}`, url: ackUrl });
         await supa.from("alert_attempts").insert({
           alert_id: a.id,
           tier: ctx.alert.current_tier,
@@ -416,7 +485,7 @@ export async function telegramReminders() {
           channel: "telegram",
           provider_ref: res.ref,
           status: res.status,
-          detail: res.detail as object,
+          detail: { ...(res.detail as object), lang },
         });
       }),
     );
@@ -472,22 +541,30 @@ export async function acknowledge(alertId: string, by: string) {
   const ctx = await getAlertContext(alertId);
   const { data: attempts } = await supa
     .from("alert_attempts")
-    .select("contact_phone")
+    .select("contact_phone, detail")
     .eq("alert_id", alertId)
     .eq("channel", "sms");
-  const phones = [...new Set((attempts ?? []).map((a) => a.contact_phone))];
+  const phoneLang = new Map<string, Lang>();
+  for (const a of attempts ?? []) {
+    if (!phoneLang.has(a.contact_phone)) phoneLang.set(a.contact_phone, asLang((a.detail as { lang?: string } | null)?.lang));
+  }
   const { data: tgAttempts } = await supa
     .from("alert_attempts")
     .select("detail")
     .eq("alert_id", alertId)
     .eq("channel", "telegram")
     .eq("status", "sent");
-  const chats = [...new Set((tgAttempts ?? []).map((a) => (a.detail as { chat_id?: number } | null)?.chat_id).filter(Boolean))];
+  const chatLang = new Map<number, Lang>();
+  for (const a of tgAttempts ?? []) {
+    const d = a.detail as { chat_id?: number; lang?: string } | null;
+    if (d?.chat_id && !chatLang.has(d.chat_id)) chatLang.set(d.chat_id, asLang(d.lang));
+  }
   if (ctx) {
-    const update = `UPDATE: ${by} is responding to the ${ctx.hazard === "co" ? "carbon monoxide" : "fire"} alert at ${locationText(ctx)}.`;
+    const update = (lang: Lang) =>
+      `${WORDS[lang].update}: ${WORDS[lang].responding(by, ctx.hazard, locationText(ctx))}`;
     await Promise.allSettled([
-      ...phones.map((p) => safeSms(p, update)),
-      ...chats.map((c) => sendTelegram(c as number, `✅ ${update}`)),
+      ...[...phoneLang.entries()].map(([p, lang]) => safeSms(p, update(lang))),
+      ...[...chatLang.entries()].map(([c, lang]) => sendTelegram(c, `✅ ${update(lang)}`)),
     ]);
   }
   return true;

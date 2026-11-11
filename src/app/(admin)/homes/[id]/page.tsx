@@ -5,6 +5,9 @@ import { env } from "@/lib/env";
 import { STATUS_STYLE, ago } from "@/lib/ui";
 import { addHomeContact, addHomeDevice, recheckHomePostcode, testAlarm, toggleContact } from "@/app/actions";
 import PostcodeBadge from "@/components/PostcodeBadge";
+import PanicLink from "@/components/PanicLink";
+import LangSelect from "@/components/LangSelect";
+import { LANGS } from "@/lib/i18n";
 import { nipostEnabled } from "@/lib/nipost";
 import AutoRefresh from "@/components/AutoRefresh";
 
@@ -47,14 +50,22 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
   const supa = db();
   const { data: home } = await supa
     .from("markets")
-    .select("*, shops(id, owner_name, owner_phone, backup_phone, sensors(*))")
+    .select("*, shops(id, owner_name, owner_phone, backup_phone, panic_token, sensors(*))")
     .eq("id", id)
     .eq("kind", "home")
     .maybeSingle();
   if (!home) notFound();
 
-  const household = (home.shops as { owner_name: string; owner_phone: string; backup_phone: string | null; sensors: Sensor[] }[])[0];
-  const sensors = household?.sensors ?? [];
+  const household = (
+    home.shops as {
+      owner_name: string;
+      owner_phone: string;
+      backup_phone: string | null;
+      panic_token: string | null;
+      sensors: Sensor[];
+    }[]
+  )[0];
+  const sensors = (household?.sensors ?? []).filter((x) => x.kind !== "panic");
 
   const [{ data: contacts }, { data: alerts }] = await Promise.all([
     supa.from("contacts").select("*").eq("market_id", id).order("tier"),
@@ -151,6 +162,8 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
         </Link>
       )}
 
+      <PanicLink token={household?.panic_token ?? null} />
+
       <section className="space-y-3">
         <h2 className="font-semibold">Devices</h2>
         {sensors.map((s) => {
@@ -227,6 +240,7 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
                 <td className="p-2">{c.name}</td>
                 <td className="p-2">{c.phone}</td>
                 <td className="p-2">{ROLE_LABEL[c.role] ?? c.role}</td>
+                <td className="p-2">{LANGS.find((l) => l.code === c.language)?.label ?? "English"}</td>
                 <td className="p-2 text-right">
                   <form action={toggleContact}>
                     <input type="hidden" name="id" value={c.id} />
@@ -243,7 +257,7 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
             )}
           </tbody>
         </table>
-        <form action={addHomeContact} className="grid gap-2 rounded-lg border bg-white p-4 sm:grid-cols-5">
+        <form action={addHomeContact} className="grid gap-2 rounded-lg border bg-white p-4 sm:grid-cols-3 lg:grid-cols-6">
           <input type="hidden" name="market_id" value={id} />
           <input name="name" required placeholder="Name" className={input} />
           <input name="phone" required placeholder="Phone (+44… or 0803…)" className={input} />
@@ -258,6 +272,7 @@ export default async function HomePage({ params }: { params: Promise<{ id: strin
               <option key={t} value={t}>Tier {t}</option>
             ))}
           </select>
+          <LangSelect />
           <button className={btn}>Add</button>
         </form>
       </section>

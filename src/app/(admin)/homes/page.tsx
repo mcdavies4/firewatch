@@ -4,6 +4,7 @@ import { STATUS_STYLE, worstStatus, ago } from "@/lib/ui";
 import { createHome } from "@/app/actions";
 import AutoRefresh from "@/components/AutoRefresh";
 import DbError from "@/components/DbError";
+import LangSelect from "@/components/LangSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ type HomeRow = {
   shops: {
     owner_name: string;
     owner_phone: string;
-    sensors: { status: string; last_seen_at: string | null }[];
+    sensors: { status: string; last_seen_at: string | null; kind?: string }[];
   }[];
 };
 
@@ -28,7 +29,7 @@ export default async function Homes() {
   const [{ data, error }, { data: openAlerts }] = await Promise.all([
     supa
       .from("markets")
-      .select("id, name, city, address, nipost_postcode, postcode_status, shops(owner_name, owner_phone, sensors(status, last_seen_at))")
+      .select("id, name, city, address, nipost_postcode, postcode_status, shops(owner_name, owner_phone, sensors(status, last_seen_at, kind))")
       .eq("kind", "home")
       .order("name"),
     supa.from("alerts").select("market_id, hazard").in("status", ["open", "acknowledged"]),
@@ -50,7 +51,7 @@ export default async function Homes() {
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {homes.map((h) => {
-          const sensors = h.shops.flatMap((s) => s.sensors);
+          const sensors = h.shops.flatMap((s) => s.sensors).filter((x) => x.kind !== "panic");
           const alert = alertFor(h.id);
           const st = alert ? "alarm" : worstStatus(sensors.map((x) => x.status));
           const style = STATUS_STYLE[st] ?? STATUS_STYLE.none;
@@ -104,10 +105,11 @@ export default async function Homes() {
           <input name="lng" placeholder="Map pin longitude (optional)" className={input} />
         </div>
         <h3 className="pt-2 text-sm font-semibold">Who lives there (called first)</h3>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2">
           <input name="owner_name" required placeholder="Resident name" className={input} />
           <input name="owner_phone" required placeholder="Phone (0803… or +234…)" className={input} />
           <input name="backup_phone" placeholder="Second phone (optional)" className={input} />
+          <LangSelect name="owner_language" />
         </div>
         <button className="rounded bg-zinc-900 px-3 py-2 text-sm font-semibold text-white">Add home</button>
       </form>

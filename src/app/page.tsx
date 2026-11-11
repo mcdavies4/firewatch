@@ -61,6 +61,7 @@ export default function Landing() {
           <nav className="flex items-center gap-3 text-sm font-semibold sm:gap-5 sm:text-base">
             <a href="#how" className="hidden hover:underline sm:inline">How it works</a>
             <a href="#nipost" className="hidden hover:underline sm:inline">NIPOST postcode</a>
+            <Link href="/impact" className="hover:underline">Impact</Link>
             <Link href="/dashboard" className="rounded-lg border-2 border-zinc-900 px-3 py-1.5 hover:bg-zinc-900 hover:text-white">
               Sign in
             </Link>

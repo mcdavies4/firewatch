@@ -24,6 +24,8 @@ class Q {
   is(k: string, v: any) { this.filters.push((r) => (r[k] ?? null) === v); return this; }
   not(k: string, _op: string, v: any) { this.filters.push((r) => (r[k] ?? null) !== v); return this; }
   lte(k: string, v: any) { this.filters.push((r) => r[k] <= v); return this; }
+  gte(k: string, v: any) { this.filters.push((r) => r[k] >= v); return this; }
+  delete() { this.op = "delete" as any; return this; }
   lt(k: string, v: any) { this.filters.push((r) => r[k] < v); return this; }
   or(expr: string) {
     // supports "section_id.is.null,section_id.eq.X"
@@ -40,7 +42,13 @@ class Q {
     if (!this.cols.includes("(")) return r;
     const out = { ...r };
     for (const [rel, fk] of [["shops", "shop_id"], ["sections", "section_id"], ["markets", "market_id"]]) {
-      if (this.cols.includes(`${rel}(`)) out[rel] = (tables[rel] ?? []).find((x) => x.id === r[fk]) ?? null;
+      if (this.cols.includes(`${rel}(`)) {
+        const found = (tables[rel] ?? []).find((x) => x.id === r[fk]) ?? null;
+        // one nested level: shops(..., markets(...))
+        out[rel] = found && rel === "shops" && /shops\([^)]*markets\(/.test(this.cols)
+          ? { ...found, markets: (tables.markets ?? []).find((m) => m.id === found.market_id) ?? null }
+          : found;
+      }
     }
     return out;
   }
@@ -63,6 +71,7 @@ class Q {
     }
     const hit = t.filter((r) => this.filters.every((f) => f(r)));
     if (this.op === "update") { hit.forEach((r) => Object.assign(r, this.payload)); return { data: hit, error: null }; }
+    if ((this.op as string) === "delete") { tables[this.table] = t.filter((r) => !hit.includes(r)); return { data: hit, error: null }; }
     const data = hit.map((r) => this.join(r));
     if (this.one) return { data: data[0] ?? null, error: null };
     return { data, error: null };

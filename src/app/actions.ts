@@ -12,6 +12,7 @@ import { sendSms } from "@/lib/notify/sms";
 import { explainDelivery } from "@/lib/notify/explain";
 import { sendTelegram, telegramEnabled, telegramSecret, tg } from "@/lib/notify/telegram";
 import { env } from "@/lib/env";
+import { asLang } from "@/lib/i18n";
 
 /** Server actions are reachable from any page, so admin ones re-check the dashboard login. */
 async function requireAdmin() {
@@ -68,6 +69,7 @@ export async function createShop(f: FormData) {
       owner_phone: phone(s(f, "owner_phone")),
       backup_phone: phone(s(f, "backup_phone")),
       trade: s(f, "trade"),
+      owner_language: asLang(s(f, "owner_language")),
     }),
   );
   revalidatePath("/setup");
@@ -84,6 +86,7 @@ export async function createContact(f: FormData) {
       phone: phone(s(f, "phone")),
       role: s(f, "role"),
       tier: Number(s(f, "tier") ?? 0),
+      language: asLang(s(f, "language")),
     }),
   );
   revalidatePath("/setup");
@@ -219,6 +222,7 @@ export async function createHome(f: FormData) {
       owner_phone: phone(s(f, "owner_phone")),
       backup_phone: phone(s(f, "backup_phone")),
       nipost_postcode: pc.postcode,
+      owner_language: asLang(s(f, "owner_language")),
     }),
   );
   revalidatePath("/homes");
@@ -235,6 +239,7 @@ export async function addHomeContact(f: FormData) {
       phone: phone(s(f, "phone")),
       role: s(f, "role") ?? "family",
       tier: Number(s(f, "tier") ?? 0),
+      language: asLang(s(f, "language")),
     }),
   );
   revalidatePath(`/homes/${homeId}`);
@@ -438,4 +443,24 @@ export async function sendTestTelegram(f: FormData) {
   if (!link) redirect("/demo?tg=failed&why=" + encodeURIComponent(`${p} hasn't connected Telegram yet`) + "#telegram");
   const r = await sendTelegram(link!.chat_id, "🔥 Firewatch test: if you can read this, Telegram alerts are working.");
   redirect(`/demo?tg=${r.status === "sent" ? "ok" : "failed"}&why=${encodeURIComponent(r.status === "sent" ? `Sent to ${p} on Telegram` : explainDelivery(r.detail))}#telegram`);
+}
+
+// ---------- Fire stations ----------
+export async function createStation(f: FormData) {
+  await requireAdmin();
+  await must(
+    db().from("fire_stations").insert({
+      name: s(f, "name"),
+      phone: phone(s(f, "phone")),
+      state: s(f, "state"),
+      lga: s(f, "lga"),
+    }),
+  );
+  revalidatePath("/stations");
+}
+
+export async function toggleStation(f: FormData) {
+  await requireAdmin();
+  await must(db().from("fire_stations").update({ active: s(f, "active") === "true" }).eq("id", s(f, "id")));
+  revalidatePath("/stations");
 }

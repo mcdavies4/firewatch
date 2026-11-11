@@ -1,5 +1,7 @@
 import { db } from "@/lib/supabase";
 import { ago, STATUS_STYLE } from "@/lib/ui";
+import LangSelect from "@/components/LangSelect";
+import { env } from "@/lib/env";
 import { assignSensor, createContact, createMarket, createSection, createShop, toggleContact } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +14,7 @@ export default async function Setup() {
   const supa = db();
   const [{ data: markets }, { data: sections }, { data: shops }, { data: contacts }, { data: sensors }] =
     await Promise.all([
-      supa.from("markets").select("id, name").eq("kind", "market").order("name"),
+      supa.from("markets").select("id, name, join_token").eq("kind", "market").order("name"),
       supa.from("sections").select("id, name, market_id").order("name"),
       supa.from("shops").select("id, shop_number, owner_name, market_id").order("shop_number"),
       supa.from("contacts").select("*").order("tier"),
@@ -66,6 +68,7 @@ export default async function Setup() {
           <input name="owner_phone" required placeholder="Owner phone (0803… or +234…)" className={input} />
           <input name="backup_phone" placeholder="Backup phone (optional)" className={input} />
           <input name="trade" placeholder="Trade, e.g. fabrics" className={input} />
+          <LangSelect name="owner_language" />
           <input name="nipost_postcode" placeholder="NIPOST postcode, e.g. EK-01-A03-FK-01 (checked on save)" className={`${input} font-mono uppercase`} />
           <button className={btn}>Register shop</button>
         </form>
@@ -111,10 +114,35 @@ export default async function Setup() {
                 <option key={t} value={t}>Tier {t}</option>
               ))}
             </select>
+            <LangSelect />
           </div>
           <button className={btn}>Add responder</button>
         </form>
       </div>
+
+      {!!markets?.length && (
+        <section className="space-y-2">
+          <h2 className="font-semibold">📲 Trader sign-up links</h2>
+          <p className="text-sm text-zinc-800">
+            Share a market&apos;s link (or print its QR poster) and traders register their own shops. Self-registered
+            shops are marked in the shop list.
+          </p>
+          {markets.map((m) =>
+            m.join_token ? (
+              <div key={m.id} className="flex flex-wrap items-center gap-2 rounded-lg border bg-white p-3">
+                <b className="mr-2">{m.name}</b>
+                <code className="break-all rounded bg-zinc-100 px-2 py-1 text-sm">
+                  {`${env.appUrl()}/join/${m.join_token}`}
+                </code>
+                <a href={`/join/${m.join_token}`} target="_blank" className="text-sm font-semibold underline">Open</a>
+                <a href={`/join/${m.join_token}/poster`} target="_blank" className="rounded bg-zinc-900 px-3 py-1 text-sm font-semibold text-white">
+                  🖨 QR poster
+                </a>
+              </div>
+            ) : null,
+          )}
+        </section>
+      )}
 
       <section>
         <h2 className="mb-2 font-semibold">Responders</h2>

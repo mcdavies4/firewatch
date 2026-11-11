@@ -41,6 +41,12 @@ export default async function Cert({ params }: { params: Promise<{ code: string 
           Valid until {new Date(cert.valid_until).toLocaleDateString("en-GB")} · Code {cert.certificate_code}
         </div>
       </div>
+      <a
+        href={`/cert/${cert.certificate_code}/pdf`}
+        className="mt-4 block rounded-lg bg-zinc-900 p-3 text-center font-semibold text-white"
+      >
+        Download certificate + insurer report (PDF)
+      </a>
     </main>
   );
 }
