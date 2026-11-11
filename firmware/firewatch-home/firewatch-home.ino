@@ -5,14 +5,15 @@
  *   - ESP32 DevKit (WROOM-32)
  *   - MQ-2 smoke/gas module  -> AO to GPIO34
  *   - MQ-7 CO module         -> AO to GPIO35
- *   - Active buzzer          -> GPIO25 (via NPN transistor if >20 mA)
- *   - Red LED (+220Ω)        -> GPIO26
- *   - Test button            -> GPIO27 to GND (internal pull-up)
+ *   - Active buzzer module   -> GPIO25 (KY-012 type: VCC 3.3V, GND, S/I-O)
+ *   - Status LED             -> the board's own blue LED (GPIO2), nothing to buy
+ *   - Test button            -> the board's own BOOT button (GPIO0), nothing to buy
  *   - Optional battery sense -> GPIO32 via 100k/100k divider from 18650 (+)
  *   - 18650 cell + TP4056 charger + 5V boost so it survives power cuts
  *
- * MQ modules output up to 5V on AO. Put a divider (e.g. 10k/20k) on each AO
- * before the ESP32 pin — ESP32 inputs are 3.3V max.
+ * MQ modules run on 5V (VIN pin of the ESP32 when on USB) and their AO can reach ~4-5V.
+ * ESP32 inputs are 3.3V max, so put a divider on each AO: AO -> 10k -> pin, and
+ * pin -> 10k -> 10k -> GND (two 10k in series = 20k). Four 10k resistors per unit.
  *
  * Setup:
  *   1. Add the home + device in Firewatch (Homes → home → Add device).
@@ -42,8 +43,8 @@
 #define PIN_SMOKE   34
 #define PIN_CO      35
 #define PIN_BUZZER  25
-#define PIN_LED     26
-#define PIN_BUTTON  27
+#define PIN_LED     2    // onboard LED (DOIT DevKit V1 / most 30-pin boards)
+#define PIN_BUTTON  0    // onboard BOOT button; press after start-up to send a test
 #define PIN_BATTERY 32
 #define HAS_BATTERY_SENSE false   // set true once the divider is wired
 
