@@ -26,6 +26,8 @@ function friendly(raw: string): string {
   const s = raw.toLowerCase();
   if (s.includes("insufficientbalance") || s.includes("insufficient balance"))
     return `${raw} — top up your Africa's Talking account`;
+  if (s.includes("sender_id_not_approved") || (s.includes("sender") && s.includes("not registered")))
+    return `${raw} — request this sender ID in the Termii dashboard (Sender IDs), or set TERMII_FROM to a sender ID that's already approved there`;
   if (s.includes("invalidsenderid") || s.includes("sender"))
     return `${raw} — the sender ID isn't approved yet; clear AT_SMS_SENDER in Vercel to use the default`;
   if (s.includes("invalidphonenumber") || s.includes("unsupportednumbertype") || s.includes("couldnotroute"))
