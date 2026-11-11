@@ -13,6 +13,7 @@ import {
 import { botUsername, linkUrl, telegramEnabled } from "@/lib/notify/telegram";
 import { explainDelivery } from "@/lib/notify/explain";
 import { voiceEnabled } from "@/lib/notify/africastalking";
+import { smsProviderStatus } from "@/lib/notify/sms";
 import AutoRefresh from "@/components/AutoRefresh";
 import DbError from "@/components/DbError";
 
@@ -186,7 +187,17 @@ export default async function Demo({
             {sandbox && <b className="text-amber-800"> · SANDBOX mode: texts only appear in the AT simulator, not on real phones</b>}
           </li>
           <li>
-            ℹ️ Sender ID: <b>{sender ?? "default (none set)"}</b>
+            📨 SMS companies, tried in order:{" "}
+            {smsProviderStatus().map((p, i) => (
+              <span key={p.name}>
+                {i > 0 && " → "}
+                <b>{p.name}</b> {p.ready ? "✅" : "❌ keys missing"}
+              </span>
+            ))}
+            <span className="text-zinc-700"> (change with SMS_PROVIDERS in Vercel)</span>
+          </li>
+          <li>
+            ℹ️ Africa&apos;s Talking sender ID: <b>{sender ?? "default (none set)"}</b>
             {sender && <span className="text-zinc-700"> — if texts fail, it may not be approved yet; clear AT_SMS_SENDER</span>}
           </li>
           <li>

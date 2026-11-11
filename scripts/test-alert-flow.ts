@@ -20,6 +20,16 @@ globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
     sent.push(`TG ${b.chat_id}: ${b.text} [${b.reply_markup?.inline_keyboard?.[0]?.[0]?.text ?? ""}]`);
     return new Response(JSON.stringify({ ok: true, result: { message_id: 9 } }));
   }
+  if (u.includes("bulksmsnigeria")) {
+    const b = JSON.parse(String(init?.body ?? "{}"));
+    sent.push(`BSNG ${b.to} [${b.from}/${b.gateway}]: ${b.body}`);
+    return new Response(JSON.stringify({ status: "success", code: "BSNG-0000", data: { message_id: "b1", gateway_used: "direct-corporate" } }));
+  }
+  if (u.includes("termii")) {
+    const b = JSON.parse(String(init?.body ?? "{}"));
+    sent.push(`TERMII ${b.to} [${b.channel}]: ${b.sms}`);
+    return new Response(JSON.stringify({ message_id: "t1", message: "Successfully Sent" }));
+  }
   if (u.includes("messaging")) {
     if (mode === "sms-throws") throw new Error("socket hang up");
     if (mode === "dnd")
@@ -116,6 +126,27 @@ for (const [m, voice] of [["ok", ""], ["ok", "+2347000000000"], ["sms-throws", "
   age(61);
   check("no reminders once someone responds", (await telegramReminders()).length === 0);
   void r;
+}
+// SMS fallback: Africa's Talking rejects (DND) -> BulkSMSNigeria corporate route delivers
+{
+  seed(); sent.length = 0; mode = "dnd";
+  delete process.env.TELEGRAM_BOT_TOKEN;
+  process.env.SMS_PROVIDERS = "africastalking,bulksmsnigeria,termii";
+  process.env.BULKSMSNG_TOKEN = "tok"; process.env.BULKSMSNG_FROM = "Firewatch";
+  console.log("\nSMS fallback when Africa's Talking hits DND");
+  await drill();
+  const sms = rows().filter((x) => x.channel === "sms");
+  check("texts marked sent via fallback", sms.length === 2 && sms.every((x) => x.status === "sent" && x.detail?.provider === "bulksmsnigeria"));
+  check("fallback used corporate route, digits-only number", sent.some((x) => x.startsWith("BSNG 2348030000000 [Firewatch/direct-corporate]")));
+  check("termii not needed", !sent.some((x) => x.startsWith("TERMII")));
+
+  seed(); sent.length = 0;
+  process.env.SMS_PROVIDERS = "termii,africastalking";
+  process.env.TERMII_API_KEY = "k"; process.env.TERMII_FROM = "Firewatch";
+  console.log("\nTermii first, dnd channel");
+  await drill();
+  check("termii used first on dnd channel", sent.filter((x) => x.startsWith("TERMII ") && x.includes("[dnd]")).length === 2 && !sent.some((x) => x.startsWith("SMS ")));
+  delete process.env.SMS_PROVIDERS;
 }
 console.log(fail ? `\n${fail} FAILED` : "\nALL PASS");
 if (fail) process.exit(1);

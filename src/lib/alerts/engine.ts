@@ -1,7 +1,8 @@
 import "server-only";
 import { db } from "../supabase";
 import { env } from "../env";
-import { placeCall, sendSms, voiceEnabled, type SendResult } from "../notify/africastalking";
+import { placeCall, voiceEnabled, type SendResult } from "../notify/africastalking";
+import { sendSms } from "../notify/sms";
 import { sendTelegram, telegramEnabled } from "../notify/telegram";
 import type { NormalisedUplink } from "../ingest/normalise";
 

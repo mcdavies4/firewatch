@@ -8,7 +8,7 @@ import { db } from "@/lib/supabase";
 import { acknowledge, closeAlert, handleUplink } from "@/lib/alerts/engine";
 import { AUDIT_ITEMS, PASS_MARK } from "@/lib/ui";
 import { checkPostcode, postcodeColumns, postcodeForPin } from "@/lib/nipost";
-import { sendSms } from "@/lib/notify/africastalking";
+import { sendSms } from "@/lib/notify/sms";
 import { explainDelivery } from "@/lib/notify/explain";
 import { sendTelegram, telegramEnabled, telegramSecret, tg } from "@/lib/notify/telegram";
 import { env } from "@/lib/env";

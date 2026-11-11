@@ -35,7 +35,8 @@ export function voiceEnabled() {
   return /^\+\d{8,15}$/.test((process.env.AT_VOICE_NUMBER ?? "").trim());
 }
 
-export async function sendSms(to: string, message: string): Promise<SendResult> {
+/** Africa's Talking SMS only. Use sendSms in ./sms.ts, which adds fallback providers. */
+export async function sendSmsAfricasTalking(to: string, message: string): Promise<SendResult> {
   if (env.notifyMode() === "log") {
     console.log(`[SMS → ${to}] ${message}`);
     return { ok: true, ref: null, status: "logged", detail: null };

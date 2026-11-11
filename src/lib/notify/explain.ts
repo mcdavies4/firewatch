@@ -2,6 +2,12 @@
 export function explainDelivery(detail: unknown): string {
   if (detail == null) return "No response from Africa's Talking";
   if (typeof detail === "string") return friendly(detail);
+  const multi = (detail as { attempts?: { provider: string; detail: unknown }[] }).attempts;
+  if (Array.isArray(multi)) return multi.map((a) => `${a.provider}: ${explainDelivery(a.detail)}`).join(" · ");
+  const bsng = detail as { status?: string; error?: { message?: string; description?: string } };
+  if (bsng.status === "error" && bsng.error) return friendly(bsng.error.message || bsng.error.description || "BulkSMSNigeria error");
+  const termii = detail as { message?: string; code?: string };
+  if (typeof termii.message === "string" && !("SMSMessageData" in (detail as object))) return friendly(termii.message);
   const d = detail as {
     SMSMessageData?: { Message?: string; Recipients?: { status?: string; statusCode?: number }[] };
     errorMessage?: string;
